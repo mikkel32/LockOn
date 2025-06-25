@@ -1,3 +1,28 @@
-PyYAML
-watchdog
-rich
+# Core UI
+customtkinter>=5.2.0
+tkinter
+
+# File Monitoring
+watchdog>=3.0.0
+
+# System Monitoring
+psutil>=5.9.0
+
+# Security
+cryptography>=41.0.0
+yara-python>=4.3.0
+python-magic>=0.4.27
+
+# Configuration
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# Utilities
+pillow>=10.0.0
+colorama>=0.4.6
+rich>=13.0.0
+
+# Optional for enhanced features
+# pandas>=2.0.0
+# plotly>=5.0.0
+# numpy>=1.24.0
