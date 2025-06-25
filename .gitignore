@@ -1,0 +1,21 @@
+# Byte-compiled / cached files
+__pycache__/
+*.py[cod]
+*.sqlite
+*.db
+*.log
+
+# Virtual environments
+venv/
+
+# Vagrant artifacts
+.vagrant/
+
+# IDE files
+*.swp
+.DS_Store
+
+# Data output
+/data/*.db
+/data/logs/
+/data/local_debug.pid

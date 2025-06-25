@@ -72,6 +72,13 @@ python main.py
 
 ## 🔧 Configuration
 
+The configuration file `config.yaml` controls runtime settings. By default the
+database file is stored at `data/database.db`. Edit this value under the
+`database.path` key if you want to log to a different location. The generated
+database is ignored by Git, so you can freely experiment without polluting the
+repository. The same section contains a `logging` block where you can specify
+the log file path and log level used by the command-line tools and debugger.
+
 ### Security Levels
 
 1. **Passive** 👁️
@@ -208,6 +215,131 @@ pip install -r requirements-dev.txt
 
 # Run tests
 python -m pytest tests/
+```
+
+### Debugging in VS Code
+
+The repository includes a `.vscode/launch.json` configuration. Open the folder
+in Visual Studio Code and run the **Run LockOn** launch target to start the
+application under the debugger.
+
+To debug inside the Vagrant VM simply run the helper script:
+
+```bash
+scripts/debug_vm.sh
+```
+This script boots the VM and ensures the `lockon-debug` service is running.
+If Vagrant is not installed the script automatically falls back to Docker if it
+is available. When neither is present the debug server runs locally so you can
+still attach a debugger.
+When running locally the helper installs `debugpy` automatically if it is not
+already available. The process ID is stored in `data/local_debug.pid` so you can
+stop the server later using the `halt` command. `debugpy` is required for remote
+debugging regardless of whether you use Vagrant, Docker or the local fallback.
+
+Under the hood it calls a Python environment manager that automatically selects
+the best available backend (Vagrant preferred, then Docker, otherwise local):
+
+```bash
+python scripts/manage_vm.py start
+```
+
+`manage_vm.py` dynamically selects a **Vagrant**, **Docker**, or **local**
+backend using an internal `EnvironmentManager` so the same commands work in any
+environment.
+
+The helper also supports additional subcommands regardless of whether it is controlling Vagrant or Docker:
+
+```bash
+python scripts/manage_vm.py status
+python scripts/manage_vm.py halt
+python scripts/manage_vm.py ssh
+python scripts/manage_vm.py logs
+python scripts/manage_vm.py doctor
+```
+
+The `doctor` command checks that the chosen backend has `debugpy` installed and
+the debug server running. For Docker it executes a quick check inside the
+`lockon` container, while the local backend verifies the background process via
+`data/local_debug.pid`.
+
+Use `--provision` with `start` to reprovision the VM. Once running, attach your
+debugger using the **Attach to VM** configuration in VS Code. The debug port
+defaults to **5678** but can be changed by setting the `LOCKON_DEBUG_PORT`
+environment variable or the `--port` flag when starting the environment.
+
+### Running inside Docker
+
+If you do not want to install Vagrant you can spin up a lightweight Docker
+container instead. A `Dockerfile` and `docker-compose.yml` are provided. Simply
+execute:
+
+```bash
+scripts/debug_docker.sh
+```
+
+This builds the image, starts the container and exposes the debug port (default
+**5678**). Set `LOCKON_DEBUG_PORT` before running the script if you need to use
+a different port. Attach VS Code using the **Attach to VM** configuration to
+begin debugging the code running inside Docker.
+
+### Development Container
+
+If you are using Visual Studio Code with the **Dev Containers** extension you
+can launch a fully configured environment without installing Vagrant or Docker
+manually. Open the project in VS Code and choose **Reopen in Container**. The
+provided `.devcontainer` folder builds a minimal image with all dependencies and
+forwards port **5678** so the debugger can attach automatically.
+
+Once the container starts the workspace is mounted and you can run the
+application or attach using the **Attach to VM** launch configuration. The
+debug server is started automatically on container boot so VS Code can
+immediately attach on the forwarded port. The debug port can be customized
+by setting `LOCKON_DEBUG_PORT` in the container environment.
+
+### Command-line Mode
+
+For headless environments you can run the monitoring engine directly without
+the UI:
+
+```bash
+python -m core.monitor_cli run
+```
+
+Pass `--debug` to wait for a debugger connection (use `--debug-port` or
+`LOCKON_DEBUG_PORT` to change the port) before monitoring starts:
+
+```bash
+python -m core.monitor_cli run --debug
+```
+
+The CLI reads `config.yaml` just like the GUI and logs events to the database
+specified there. You can override settings on the command line:
+
+```bash
+python -m core.monitor_cli run --folder /tmp --db /tmp/events.db
+```
+
+Use `--config myconfig.yaml` to load an alternative configuration file.
+
+To inspect logged information without starting monitoring, use the subcommands
+`events` and `threats`:
+
+```bash
+python -m core.monitor_cli events --limit 5
+python -m core.monitor_cli threats --limit 5
+```
+
+### Running inside Vagrant
+
+If you prefer to test in an isolated VM, a `Vagrantfile` is provided. Install
+[Vagrant](https://www.vagrantup.com/) and run:
+
+```bash
+vagrant up
+vagrant ssh
+cd /vagrant
+python3 main.py
 ```
 
 ## 📄 License

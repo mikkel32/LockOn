@@ -1,0 +1,10 @@
+version: '3'
+services:
+  lockon:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - LOCKON_DEBUG_PORT=${LOCKON_DEBUG_PORT:-5678}
+    ports:
+      - "${LOCKON_DEBUG_PORT:-5678}:${LOCKON_DEBUG_PORT:-5678}"
