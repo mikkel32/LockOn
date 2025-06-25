@@ -1,0 +1,7 @@
+logging:
+  file: data/logs/app.log
+  level: INFO
+monitor:
+  paths:
+    - .
+  recursive: true
