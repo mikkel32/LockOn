@@ -5,3 +5,5 @@ monitor:
   paths:
     - .
   recursive: true
+database:
+  path: data/database.db
