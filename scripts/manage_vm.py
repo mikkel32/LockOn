@@ -156,6 +156,13 @@ class LocalBackend(Backend):
                 print(f"Failed to install debugpy: {exc}", file=sys.stderr)
                 return False
             try:
+                import site
+                import importlib
+                usersite = site.getusersitepackages()
+                if usersite not in sys.path:
+                    site.addsitedir(usersite)
+                importlib.reload(site)
+                importlib.invalidate_caches()
                 import debugpy  # noqa: F401
                 return True
             except ImportError:
