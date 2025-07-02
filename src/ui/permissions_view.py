@@ -1,7 +1,7 @@
 """
 Permissions View - Manage access rules and security policies
 """
-import customtkinter as ctk
+from ui.ctk import ctk
 from tkinter import messagebox
 import json
 

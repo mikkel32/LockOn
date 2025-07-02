@@ -2,7 +2,7 @@
 Lock On - Main UI Application
 Magnificent security monitoring interface
 """
-import customtkinter as ctk
+from ui.ctk import ctk
 from typing import Dict, Optional
 import sys
 import json

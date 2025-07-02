@@ -1,7 +1,7 @@
 """
 Intelligence View - Configure AI patterns and threat detection
 """
-import customtkinter as ctk
+from ui.ctk import ctk
 from tkinter import messagebox
 import json
 

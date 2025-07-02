@@ -5,14 +5,16 @@ from pathlib import Path
 from typing import Optional
 
 from utils.logger import SecurityLogger
+from security.quarantine import QuarantineManager
 
 
 class ActionEnforcer:
     """Simplified security action handler used for tests"""
 
-    def __init__(self):
+    def __init__(self, quarantine_dir: Path | None = None):
         self.logger = SecurityLogger()
         self.active_protection = False
+        self.quarantine_manager = QuarantineManager(quarantine_dir or QuarantineManager.QUARANTINE_DIR)
 
     def enable_active_protection(self):
         self.active_protection = True
@@ -24,10 +26,16 @@ class ActionEnforcer:
 
     # Placeholder methods used by FolderMonitor
     def quarantine_file(self, filepath: Path):
-        self.logger.warning(f"Quarantine file: {filepath}")
+        qpath = self.quarantine_manager.quarantine(str(filepath))
+        self.logger.warning(f"Quarantine file: {filepath} -> {qpath}")
 
     def restore_file(self, filepath: Path):
-        self.logger.info(f"Restore file: {filepath}")
+        qfile = self.quarantine_manager.directory / filepath.name
+        if qfile.exists():
+            restored = self.quarantine_manager.restore(str(qfile), filepath)
+        else:
+            restored = filepath
+        self.logger.info(f"Restore file: {restored}")
 
     def emergency_lockdown(self, folder: Optional[Path]):
         self.logger.critical(f"Emergency lockdown triggered on {folder}")
