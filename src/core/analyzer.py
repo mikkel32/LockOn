@@ -1,8 +1,7 @@
 """
 Pattern Analyzer - Analyze files and behaviors for threats
 """
-import os
-import re
+
 try:
     import magic  # type: ignore
 except ImportError:  # pragma: no cover - fallback when python-magic is missing
@@ -10,7 +9,7 @@ except ImportError:  # pragma: no cover - fallback when python-magic is missing
     import mimetypes
 import hashlib
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
 from datetime import datetime
 
 from core.intelligence import IntelligenceEngine
@@ -19,7 +18,9 @@ from utils.psutil_compat import psutil
 
 class ThreatAnalysis:
     """Threat analysis result"""
-    def __init__(self, level: str, type: str, confidence: float, details: Dict):
+    def __init__(
+        self, level: str, type: str, confidence: float, details: Dict
+    ) -> None:
         self.level = level  # low, medium, high, critical
         self.type = type    # malware, ransomware, trojan, etc
         self.confidence = confidence
@@ -89,7 +90,7 @@ class PatternAnalyzer:
                 for chunk in iter(lambda: f.read(4096), b""):
                     hash_md5.update(chunk)
             return hash_md5.hexdigest()
-        except:
+        except Exception:
             return ""
 
     def _check_mime_mismatch(self, filepath: Path) -> float:
@@ -118,7 +119,7 @@ class PatternAnalyzer:
             if extension not in ['.exe', '.dll', '.com'] and 'executable' in mime_type:
                 return 0.9
 
-        except:
+        except Exception:
             pass
 
         return 0.0
@@ -195,7 +196,7 @@ class PatternAnalyzer:
             if any(str(filepath).endswith(ext) for ext in ransom_extensions):
                 return True
 
-        except:
+        except Exception:
             pass
 
         return False
@@ -248,7 +249,7 @@ class PatternAnalyzer:
             if self._check_suspicious_parent(process):
                 return True
 
-        except:
+        except Exception:
             pass
 
         return False
@@ -266,7 +267,7 @@ class PatternAnalyzer:
                     if process.name().lower() not in ['python.exe', 'node.exe']:
                         return True
 
-        except:
+        except Exception:
             pass
 
         return False

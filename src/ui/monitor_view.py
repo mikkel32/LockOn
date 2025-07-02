@@ -1,7 +1,10 @@
 """
 Monitor View - Real-time file system monitoring interface
 """
-from .ctk import ctk
+try:
+    from .ctk import ctk
+except ImportError:  # pragma: no cover - allow running as a script
+    from ui.ctk import ctk  # type: ignore
 from datetime import datetime
 import threading
 from pathlib import Path

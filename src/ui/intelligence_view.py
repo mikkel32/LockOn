@@ -1,7 +1,10 @@
 """
 Intelligence View - Configure AI patterns and threat detection
 """
-from .ctk import ctk
+try:
+    from .ctk import ctk
+except ImportError:  # pragma: no cover - allow running as a script
+    from ui.ctk import ctk  # type: ignore
 from tkinter import messagebox
 import json
 
