@@ -2,24 +2,24 @@
 Lock On - Main UI Application
 Magnificent security monitoring interface
 """
-from ui.ctk import ctk
+from .ctk import ctk
 from typing import Dict, Optional
 import sys
 import json
 from pathlib import Path
 
 # Import views
-from ui.dashboard import DashboardView
-from ui.monitor_view import MonitorView
-from ui.permissions_view import PermissionsView
-from ui.intelligence_view import IntelligenceView
+from .dashboard import DashboardView
+from .monitor_view import MonitorView
+from .permissions_view import PermissionsView
+from .intelligence_view import IntelligenceView
 
 # Import core
-from core.monitor import FolderMonitor
-from core.intelligence import IntelligenceEngine
-from core.permissions import PermissionManager
-from utils.config import Config
-from utils.logger import SecurityLogger
+from ..core.monitor import FolderMonitor
+from ..core.intelligence import IntelligenceEngine
+from ..core.permissions import PermissionManager
+from ..utils.config import Config
+from ..utils.logger import SecurityLogger
 
 # Set theme
 ctk.set_appearance_mode("dark")

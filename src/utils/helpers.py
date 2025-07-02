@@ -4,7 +4,7 @@ import platform
 import subprocess
 from datetime import datetime
 from typing import Iterable
-from utils.psutil_compat import psutil
+from .psutil_compat import psutil
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -15,6 +15,16 @@ console = Console()
 logger = SecurityLogger()
 
 
+def format_bytes(size: int) -> str:
+    """Return human readable file size."""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    for unit in units:
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} PB"
+
+
 def log(message: str, level: str = "info") -> None:
     """Log a message to the console and security logger."""
     console.log(message)
@@ -23,12 +33,15 @@ def log(message: str, level: str = "info") -> None:
 
 def get_system_info() -> str:
     """Return detailed system information."""
-    mem = psutil.virtual_memory().total / 1024 ** 3
+    mem = psutil.virtual_memory().total
+    cpu = psutil.cpu_count(logical=True)
+    freq = getattr(psutil, "cpu_freq", lambda: None)()
+    freq_str = f" @ {freq.current/1000:.2f}GHz" if freq else ""
     return (
         f"Platform: {platform.system()} {platform.release()} ({platform.machine()})\n"
         f"Python: {platform.python_version()}\n"
-        f"CPU: {psutil.cpu_count(logical=True)} cores\n"
-        f"Memory: {mem:.1f} GB"
+        f"CPU: {cpu} cores{freq_str}\n"
+        f"Memory: {format_bytes(int(mem))}"
     )
 
 
@@ -38,12 +51,28 @@ def run_with_spinner(
     *,
     capture_output: bool = True,
     check: bool = True,
+    timeout: float | None = None,
 ) -> subprocess.CompletedProcess:
     """Run *cmd* while displaying a spinner and return the completed process.
 
-    If ``capture_output`` is True, stdout/stderr are collected so they can be
-    logged when the command fails. If ``check`` is True a non-zero exit status
-    raises ``CalledProcessError``.
+    Parameters
+    ----------
+    cmd : Iterable[str]
+        Command and arguments to execute.
+    message : str
+        Message shown alongside the spinner.
+    capture_output : bool, optional
+        Capture stdout/stderr for logging, by default ``True``.
+    check : bool, optional
+        Raise ``CalledProcessError`` if the command exits with a non-zero
+        status, by default ``True``.
+    timeout : float | None, optional
+        If provided, terminate the command after ``timeout`` seconds.
+
+    Returns
+    -------
+    subprocess.CompletedProcess
+        Completed process object as returned by ``subprocess.run``.
     """
     with Progress(
         SpinnerColumn(),
@@ -53,7 +82,12 @@ def run_with_spinner(
     ) as progress:
         task = progress.add_task(message, start=False)
         progress.start_task(task)
-        proc = subprocess.run(list(cmd), text=True, capture_output=capture_output)
+        proc = subprocess.run(
+            list(cmd),
+            text=True,
+            capture_output=capture_output,
+            timeout=timeout,
+        )
         progress.update(task, completed=1)
 
     if proc.returncode != 0:
