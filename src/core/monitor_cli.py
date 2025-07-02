@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 
 from utils.logger import SecurityLogger
-from utils.config import load_config
+from utils.config import load_config, ensure_config
 from utils.database import Database
 from core.monitor import FolderMonitor
 
@@ -21,7 +21,9 @@ class LockOnCLI:
         debug: bool = False,
         debug_port: int = 5678,
     ) -> None:
-        self.config = load_config(config_path or Path("config.yaml"))
+        cfg_path = config_path or Path("config.yaml")
+        ensure_config(cfg_path)
+        self.config = load_config(cfg_path)
         log_cfg = self.config.get("logging", {})
         self.logger = SecurityLogger(
             Path(log_cfg.get("file", "data/logs/security.log")),

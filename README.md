@@ -39,12 +39,15 @@ Lock On is an advanced folder security monitoring system that uses intelligent p
 git clone https://github.com/yourusername/LockOn.git
 cd LockOn
 
-# Run setup
-python setup.py
+# Run setup to install dependencies
+python setup.py install --extras
 
-# Install dependencies
-pip install -r requirements.txt
+# Verify the environment
+python setup.py doctor
 ```
+
+The `--extras` flag installs additional features listed in
+`requirements-optional.txt`.
 
 ### Basic Usage
 
@@ -78,6 +81,8 @@ database file is stored at `data/database.db`. Edit this value under the
 database is ignored by Git, so you can freely experiment without polluting the
 repository. The same section contains a `logging` block where you can specify
 the log file path and log level used by the command-line tools and debugger.
+Set the `LOCKON_CONFIG` environment variable to load a different configuration
+file without passing `--config` each time.
 
 ### Security Levels
 
