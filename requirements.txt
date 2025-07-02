@@ -1,6 +1,5 @@
 # Core UI
 customtkinter>=5.2.0
-tkinter
 
 # File Monitoring
 watchdog>=3.0.0

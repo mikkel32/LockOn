@@ -32,8 +32,19 @@ def get_system_info() -> str:
     )
 
 
-def run_with_spinner(cmd: Iterable[str], message: str = "Working") -> None:
-    """Run a command while showing a spinner."""
+def run_with_spinner(
+    cmd: Iterable[str],
+    message: str = "Working",
+    *,
+    capture_output: bool = True,
+    check: bool = True,
+) -> subprocess.CompletedProcess:
+    """Run *cmd* while displaying a spinner and return the completed process.
+
+    If ``capture_output`` is True, stdout/stderr are collected so they can be
+    logged when the command fails. If ``check`` is True a non-zero exit status
+    raises ``CalledProcessError``.
+    """
     with Progress(
         SpinnerColumn(),
         TextColumn("{task.description}"),
@@ -42,11 +53,18 @@ def run_with_spinner(cmd: Iterable[str], message: str = "Working") -> None:
     ) as progress:
         task = progress.add_task(message, start=False)
         progress.start_task(task)
-        try:
-            subprocess.check_call(list(cmd))
-        except subprocess.CalledProcessError as exc:
-            log(f"Command failed: {exc}", level="error")
-            raise
-        else:
-            progress.update(task, completed=1)
+        proc = subprocess.run(list(cmd), text=True, capture_output=capture_output)
+        progress.update(task, completed=1)
+
+    if proc.returncode != 0:
+        log(f"Command failed ({proc.returncode}): {' '.join(cmd)}", level="error")
+        if capture_output:
+            if proc.stdout:
+                log(proc.stdout.strip())
+            if proc.stderr:
+                log(proc.stderr.strip(), level="error")
+        if check:
+            proc.check_returncode()
+
+    return proc
 
