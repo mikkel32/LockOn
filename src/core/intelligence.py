@@ -152,13 +152,20 @@ class IntelligenceEngine:
         # Check extension
         ext = filepath.suffix.lower()
         patterns = self.patterns.get('file_patterns', self.patterns)
+        susp_ext = patterns.get('suspicious_extensions', {})
+        if isinstance(susp_ext, list):
+            high_risk_exts = susp_ext
+            medium_risk_exts: list[str] = []
+        else:
+            high_risk_exts = susp_ext.get('high_risk', [])
+            medium_risk_exts = susp_ext.get('medium_risk', [])
 
-        if ext in patterns.get('suspicious_extensions', {}).get('high_risk', []):
+        if ext in high_risk_exts:
             result['risk_level'] = 'high'
             result['matches'].append(f"High-risk extension: {ext}")
             result['confidence'] = 0.9
 
-        elif ext in patterns.get('suspicious_extensions', {}).get('medium_risk', []):
+        elif ext in medium_risk_exts:
             result['risk_level'] = 'medium'
             result['matches'].append(f"Medium-risk extension: {ext}")
             result['confidence'] = 0.6

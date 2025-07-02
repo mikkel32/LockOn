@@ -42,17 +42,44 @@ class PatternAnalyzer:
         """Load database of known malicious file hashes"""
         # In production, this would load from a threat database
         return {
-            # Example malicious hashes
+            # Example malicious hash of an empty file
             "d41d8cd98f00b204e9800998ecf8427e": "EmptyFile.Suspicious",
-            "098f6bcd4621d373cade4e832627b4f6": "Test.Malware"
         }
 
     def analyze_file(self, filepath: Path) -> ThreatAnalysis:
-        """Simplified analysis for unit tests"""
-        ext = filepath.suffix.lower()
-        if ext in {'.exe', '.dll', '.bat', '.cmd', '.scr'}:
-            return ThreatAnalysis('high', 'suspicious_file', 0.8, {'extension': ext})
-        return ThreatAnalysis('low', 'normal', 0.1, {})
+        """Analyze *filepath* using loaded patterns and heuristics."""
+
+        # Check known malicious hashes first
+        file_hash = self._calculate_file_hash(filepath)
+        if file_hash in self.known_hashes:
+            return ThreatAnalysis(
+                'critical',
+                'known_malware',
+                1.0,
+                {'hash': file_hash, 'signature': self.known_hashes[file_hash]},
+            )
+
+        analysis = self.intelligence.analyze_file_pattern(filepath)
+        level = analysis['risk_level']
+        confidence = analysis['confidence']
+
+        # Adjust risk based on MIME mismatch heuristics
+        mime_score = self._check_mime_mismatch(filepath)
+        if mime_score:
+            if mime_score > 0.7:
+                level = 'high'
+            elif level == 'low':
+                level = 'medium'
+            confidence = max(confidence, mime_score)
+            analysis.setdefault('matches', []).append('mime_mismatch')
+
+        threat_type = self._determine_threat_type(filepath, analysis)
+        details = {
+            'matches': analysis.get('matches', []),
+            'confidence': confidence,
+        }
+
+        return ThreatAnalysis(level, threat_type, confidence, details)
 
     def _calculate_file_hash(self, filepath: Path) -> str:
         """Calculate MD5 hash of file"""
