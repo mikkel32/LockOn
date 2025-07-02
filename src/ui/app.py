@@ -2,7 +2,15 @@
 Lock On - Main UI Application
 Magnificent security monitoring interface
 """
-from .ctk import ctk
+if __package__ in {None, ""}:
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.append(str(_Path(__file__).resolve().parent))
+    __package__ = "ui"
+try:
+    from .ctk import ctk
+except ImportError:  # pragma: no cover - allow running as a script
+    from ui.ctk import ctk  # type: ignore
 from typing import Dict, Optional
 import sys
 import json
@@ -15,11 +23,15 @@ from .permissions_view import PermissionsView
 from .intelligence_view import IntelligenceView
 
 # Import core
-from ..core.monitor import FolderMonitor
-from ..core.intelligence import IntelligenceEngine
-from ..core.permissions import PermissionManager
-from ..utils.config import Config
-from ..utils.logger import SecurityLogger
+# Import core modules using absolute paths so the application can be
+# executed from any entry point without relying on relative package
+# structure. This avoids ``ImportError: attempted relative import beyond
+# top-level package`` when ``src`` is added directly to ``sys.path``.
+from core.monitor import FolderMonitor
+from core.intelligence import IntelligenceEngine
+from core.permissions import PermissionManager
+from utils.config import Config
+from utils.logger import SecurityLogger
 
 # Set theme
 ctk.set_appearance_mode("dark")
