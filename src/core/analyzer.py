@@ -12,9 +12,9 @@ import hashlib
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
-import psutil
 
 from core.intelligence import IntelligenceEngine
+from utils.psutil_compat import psutil
 
 
 class ThreatAnalysis:

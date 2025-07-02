@@ -1,7 +1,7 @@
 """
 Monitor View - Real-time file system monitoring interface
 """
-import customtkinter as ctk
+from ui.ctk import ctk
 from datetime import datetime
 import threading
 from pathlib import Path

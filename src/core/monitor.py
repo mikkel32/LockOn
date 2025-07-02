@@ -8,9 +8,91 @@ import hashlib
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Callable
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileSystemEvent
-import psutil
+try:  # optional watchdog dependency
+    from watchdog.observers import Observer  # type: ignore
+    from watchdog.events import FileSystemEventHandler, FileSystemEvent  # type: ignore
+    WATCHDOG_AVAILABLE = True
+except Exception:  # pragma: no cover - provide fallback
+    WATCHDOG_AVAILABLE = False
+    class FileSystemEvent:
+        """Minimal stand-in for ``watchdog`` events."""
+
+        def __init__(self, src_path: str, is_directory: bool = False, dest_path: str | None = None) -> None:
+            self.src_path = src_path
+            self.dest_path = dest_path
+            self.is_directory = is_directory
+
+
+    class FileSystemEventHandler:
+        """Base event handler used when ``watchdog`` is unavailable."""
+
+    class _PollingObserver:
+        """Very small polling based observer as a fallback."""
+
+        def __init__(self, interval: float = 1.0) -> None:
+            self.interval = interval
+            self._handlers: list[tuple[FileSystemEventHandler, Path, bool, dict[str, float]]] = []
+            self._thread: threading.Thread | None = None
+            self._running = False
+
+        def schedule(self, handler: FileSystemEventHandler, path: str, recursive: bool = True) -> None:
+            self._handlers.append((handler, Path(path), recursive, {}))
+
+        def start(self) -> None:
+            if self._running:
+                return
+            self._running = True
+            self._thread = threading.Thread(target=self._loop, daemon=True)
+            self._thread.start()
+
+        def _loop(self) -> None:
+            while self._running:
+                for handler, path, recursive, snapshot in self._handlers:
+                    self._scan(handler, path, recursive, snapshot)
+                time.sleep(self.interval)
+
+        def _scan(self, handler: FileSystemEventHandler, path: Path, recursive: bool, snapshot: dict[str, float]) -> None:
+            current: dict[str, float] = {}
+            walker = os.walk(path) if recursive else [(path, [], os.listdir(path))]
+            for root, _, files in walker:
+                for name in files:
+                    fp = Path(root) / name
+                    try:
+                        mtime = fp.stat().st_mtime
+                    except FileNotFoundError:
+                        continue
+                    current[str(fp)] = mtime
+                    if str(fp) not in snapshot:
+                        event = FileSystemEvent(str(fp))
+                        if hasattr(handler, "on_created"):
+                            handler.on_created(event)
+                    elif snapshot[str(fp)] != mtime:
+                        event = FileSystemEvent(str(fp))
+                        if hasattr(handler, "on_modified"):
+                            handler.on_modified(event)
+
+            # handle deletions
+            for old in list(snapshot):
+                if old not in current:
+                    event = FileSystemEvent(old)
+                    if hasattr(handler, "on_deleted"):
+                        handler.on_deleted(event)
+                    snapshot.pop(old, None)
+
+            snapshot.update(current)
+
+        def stop(self) -> None:
+            self._running = False
+            if self._thread:
+                self._thread.join()
+
+        def join(self, timeout: float | None = None) -> None:
+            if self._thread:
+                self._thread.join(timeout)
+
+
+    Observer = _PollingObserver
+from utils.psutil_compat import psutil
 
 from core.analyzer import PatternAnalyzer
 from core.enforcer import ActionEnforcer

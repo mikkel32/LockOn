@@ -1,7 +1,7 @@
 """
 Dashboard View - Main overview of system security status
 """
-import customtkinter as ctk
+from ui.ctk import ctk
 from datetime import datetime
 import threading
 from typing import Dict, List

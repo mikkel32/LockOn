@@ -4,7 +4,7 @@ import platform
 import subprocess
 from datetime import datetime
 from typing import Iterable
-import psutil
+from utils.psutil_compat import psutil
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
