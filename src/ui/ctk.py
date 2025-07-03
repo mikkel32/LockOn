@@ -26,7 +26,10 @@ except Exception:  # pragma: no cover - lightweight fallback
 
         for ctk_key, tk_key in mapping.items():
             if ctk_key in kwargs:
-                kwargs[tk_key] = kwargs.pop(ctk_key)
+                value = kwargs.pop(ctk_key)
+                if isinstance(value, str) and value.lower() == "transparent":
+                    value = ""
+                kwargs[tk_key] = value
 
         # discard unsupported options
         for key in [

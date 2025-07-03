@@ -337,7 +337,7 @@ Under the hood it calls a Python environment manager that automatically selects
 the best available backend (Vagrant preferred, then Docker, otherwise local):
 
 ```bash
-python scripts/manage_vm.py start
+python scripts/manage_vm.py start --open-vscode
 ```
 
 `manage_vm.py` dynamically selects a **Vagrant**, **Docker**, or **local**
