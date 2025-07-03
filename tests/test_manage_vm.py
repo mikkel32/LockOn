@@ -1,6 +1,7 @@
 import types
 import sys
 import subprocess
+import builtins
 from scripts import manage_vm
 
 class FakeProcError(Exception):
@@ -17,6 +18,13 @@ def _fake_spawn(cmd, env=None):
     class P:
         pid = 1234
     return P()
+
+def _fake_launch_vscode(workspace, port):
+    _fake_launch_vscode.calls.append((workspace, port))
+
+_fake_run.calls = []
+_fake_spawn.calls = []
+_fake_launch_vscode.calls = []
 
 
 def test_start_prefers_vagrant(monkeypatch):
@@ -38,7 +46,11 @@ def test_start_falls_back_to_docker(monkeypatch):
         return "/bin/docker" if name in {"docker", "docker-compose"} else None
     monkeypatch.setattr(manage_vm, "which", fake_which)
     manage_vm.main(["start", "--port", "6000"])
-    assert any(call[0] == ["docker-compose", "up", "--build", "-d"] and call[1]["LOCKON_DEBUG_PORT"] == "6000" for call in _fake_run.calls)
+    assert any(
+        call[0][:2] == ["docker", "compose"] and call[0][2:] == ["up", "--build", "-d"] and call[1]["LOCKON_DEBUG_PORT"] == "6000"
+        or call[0] == ["docker-compose", "up", "--build", "-d"] and call[1]["LOCKON_DEBUG_PORT"] == "6000"
+        for call in _fake_run.calls
+    )
 
 
 def test_local_backend_when_no_env(monkeypatch, tmp_path, capsys):
@@ -49,6 +61,13 @@ def test_local_backend_when_no_env(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(manage_vm, "which", lambda name: None)
     monkeypatch.setenv("LOCKON_LOCAL_PID", str(tmp_path / "pid"))
     sys.modules.pop("debugpy", None)
+    monkeypatch.setitem(sys.modules, "debugpy", None)
+    real_import = builtins.__import__
+    def fake_import(name, *a, **kw):
+        if name == "debugpy" and "debugpy" not in sys.modules:
+            raise ImportError
+        return real_import(name, *a, **kw)
+    monkeypatch.setattr(builtins, "__import__", fake_import)
     manage_vm.main(["start", "--port", "6000"])
     out = capsys.readouterr().err
     assert "debugpy not found" in out
@@ -73,6 +92,13 @@ def test_doctor_local_backend(monkeypatch, capsys):
     _fake_run.calls = []
     _fake_spawn.calls = []
     sys.modules.pop("debugpy", None)
+    monkeypatch.setitem(sys.modules, "debugpy", None)
+    real_import = builtins.__import__
+    def fake_import(name, *a, **kw):
+        if name == "debugpy" and "debugpy" not in sys.modules:
+            raise ImportError
+        return real_import(name, *a, **kw)
+    monkeypatch.setattr(builtins, "__import__", fake_import)
     manage_vm.main(["doctor"])
     out = capsys.readouterr().err
     assert "debugpy not found" in out
@@ -92,17 +118,26 @@ def test_doctor_docker_backend(monkeypatch):
     manage_vm.main(["doctor"])
     assert any(
         call[0][:3] == ["docker-compose", "exec", "lockon"]
+        or call[0][:4] == ["docker", "compose", "exec", "lockon"]
         for call in _fake_run.calls
     )
 
 
-def test_local_start_without_debugpy(monkeypatch, capsys):
+def test_local_start_without_debugpy(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(manage_vm, "which", lambda name: None)
     monkeypatch.setattr(manage_vm, "_run", _fake_run)
     monkeypatch.setattr(manage_vm, "_spawn", _fake_spawn)
     _fake_run.calls = []
     _fake_spawn.calls = []
     sys.modules.pop("debugpy", None)
+    monkeypatch.setenv("LOCKON_LOCAL_PID", str(tmp_path / "pid"))
+    monkeypatch.setitem(sys.modules, "debugpy", None)
+    real_import = builtins.__import__
+    def fake_import(name, *a, **kw):
+        if name == "debugpy" and "debugpy" not in sys.modules:
+            raise ImportError
+        return real_import(name, *a, **kw)
+    monkeypatch.setattr(builtins, "__import__", fake_import)
     manage_vm.main(["start"])
     out = capsys.readouterr().err
     assert "debugpy not found" in out
@@ -126,3 +161,15 @@ def test_local_halt_and_status(monkeypatch, tmp_path, capsys):
 
     manage_vm.main(["halt"])
     assert not (tmp_path / "pid").exists()
+
+
+def test_open_vscode(monkeypatch, tmp_path):
+    monkeypatch.setattr(manage_vm, "which", lambda name: None)
+    monkeypatch.setattr(manage_vm, "_run", _fake_run)
+    monkeypatch.setattr(manage_vm, "_spawn", _fake_spawn)
+    monkeypatch.setattr(manage_vm, "_launch_vscode", _fake_launch_vscode)
+    monkeypatch.setenv("LOCKON_LOCAL_PID", str(tmp_path / "pid"))
+    sys.modules["debugpy"] = types.ModuleType("debugpy")
+    _fake_launch_vscode.calls = []
+    manage_vm.main(["start", "--open-vscode"])
+    assert _fake_launch_vscode.calls
