@@ -10,19 +10,6 @@ import signal
 from shutil import which
 from pathlib import Path
 
-def _launch_vscode(workspace: Path, port: int) -> None:
-    """Open VS Code pointing at *workspace* if available."""
-    exe = which("code") or which("code-insiders")
-    if not exe:
-        print("VS Code not found; please open it manually", file=sys.stderr)
-        return
-    env = os.environ.copy()
-    env.setdefault("LOCKON_DEBUG_PORT", str(port))
-    try:
-        subprocess.run([exe, str(workspace)], env=env, check=True)
-    except Exception as exc:
-        print(f"Failed to launch VS Code: {exc}", file=sys.stderr)
-
 
 def _run(cmd: list[str], env=None) -> None:
     """Run a command and wait for completion."""
@@ -104,15 +91,8 @@ class VagrantBackend(Backend):
 class DockerBackend(Backend):
     """Control the Docker-based debug environment."""
 
-    def __init__(self, run=_run, spawn=_spawn, which=which) -> None:
-        super().__init__(run, spawn)
-        if which("docker-compose"):
-            self.compose_cmd = ["docker-compose"]
-        else:
-            self.compose_cmd = ["docker", "compose"]
-
     def _dc(self, args: list[str], env=None) -> None:
-        self._run([*self.compose_cmd, *args], env=env)
+        self._run(["docker-compose", *args], env=env)
 
     def start(self, provision: bool = False, port: int = 5678) -> None:  # pragma: no cover - simple
         env = {"LOCKON_DEBUG_PORT": str(port), **os.environ}
@@ -253,19 +233,8 @@ class EnvironmentManager:
     def _detect_backend(self) -> Backend:
         if self._which("vagrant"):
             return VagrantBackend(self._run, self._spawn)
-        if self._which("docker"):
-            if self._which("docker-compose"):
-                return DockerBackend(self._run, self._spawn)
-            try:
-                subprocess.run(
-                    ["docker", "compose", "version"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=True,
-                )
-                return DockerBackend(self._run, self._spawn)
-            except Exception:
-                pass
+        if self._which("docker") and self._which("docker-compose"):
+            return DockerBackend(self._run, self._spawn)
         # Fall back to running locally so tests and development can continue
         return LocalBackend(self._run, self._spawn)
 
@@ -297,7 +266,6 @@ def main(argv: list[str] | None = None) -> None:
     start_p = sub.add_parser("start", help="Boot the VM and ensure debug service")
     start_p.add_argument("--provision", action="store_true", help="Force reprovisioning")
     start_p.add_argument("--port", type=int, default=int(os.environ.get("LOCKON_DEBUG_PORT", 5678)), help="Port for debugger")
-    start_p.add_argument("--open-vscode", action="store_true", help="Launch VS Code after starting")
 
     sub.add_parser("halt", help="Shut down the environment")
     sub.add_parser("status", help="Show environment status")
@@ -316,8 +284,6 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.command == "start":
             manager.start(args.provision, args.port)
-            if args.open_vscode:
-                _launch_vscode(Path(__file__).resolve().parent.parent, args.port)
         elif args.command == "halt":
             manager.halt()
         elif args.command == "status":
