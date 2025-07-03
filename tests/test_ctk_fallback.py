@@ -55,3 +55,47 @@ def test_ctk_window_maps_options(monkeypatch):
     win.configure(fg_color="red", text_color="blue", border_width=3)
 
     assert win.configure_calls == [{"bg": "red", "fg": "blue", "bd": 3}]
+
+
+def test_transparent_color_mapping(monkeypatch):
+    """Transparent color should become empty string in fallback."""
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "customtkinter":
+            raise ImportError
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    class DummyWidget:
+        def __init__(self, *args, **kwargs):
+            self.kwargs = kwargs
+
+    tkmod = types.SimpleNamespace(
+        Tk=DummyWidget,
+        Frame=DummyWidget,
+        Label=DummyWidget,
+        Button=DummyWidget,
+        Canvas=DummyWidget,
+        Scrollbar=DummyWidget,
+        Scale=DummyWidget,
+        Text=DummyWidget,
+        OptionMenu=DummyWidget,
+        Radiobutton=DummyWidget,
+        Checkbutton=DummyWidget,
+        StringVar=object,
+        IntVar=object,
+        DoubleVar=object,
+    )
+    tkmod.ttk = types.SimpleNamespace()
+
+    monkeypatch.setitem(sys.modules, "tkinter", tkmod)
+    monkeypatch.setitem(sys.modules, "tkinter.ttk", tkmod.ttk)
+
+    sys.modules.pop("src.ui.ctk", None)
+    ctk = importlib.import_module("src.ui.ctk")
+
+    widget = ctk.ctk.CTkFrame(fg_color="transparent")
+
+    assert widget.kwargs.get("bg") == ""
