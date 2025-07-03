@@ -5,6 +5,8 @@ import os
 import subprocess
 import sys
 import time
+import random
+import math
 from pathlib import Path
 from typing import Iterable
 
@@ -28,14 +30,47 @@ from rich.progress import (
     BarColumn,
     TimeElapsedColumn,
 )
+from rich.panel import Panel
+from rich.align import Align
+from rich.layout import Layout
+from rich.console import Group
 
 from src.utils.helpers import log, get_system_info, run_with_spinner, console
 from src.utils.config import ensure_config
-from src.utils.rainbow import NeonPulseBorder
+from src.utils.rainbow import (
+    NeonPulseBorder, MatrixRain, GlitchText, 
+    ParticleField, AsciiFireworks
+)
 
 MIN_PYTHON = (3, 10)
 
-LOCKON_ART = r"""
+# Multiple ASCII art variations
+LOCKON_ART_3D = r"""
+╔═╗     ╔═╗ ╔═╗ ╔═╗ ╦╔═ ╔═╗ ╔╗╔
+║ ║     ║ ║ ║   ╠╩╗ ║ ║ ║║║ ║║║
+╚═╝═════╚═╝ ╚═╝ ╩ ╩ ╚═╝ ╝╚╝ ╝╚╝
+"""
+
+LOCKON_ART_BLOCKS = r"""
+▄█       ▄██████▄   ▄████████    ▄█   ▄█▄  ▄██████▄  ███▄▄▄▄   
+███      ███    ███ ███    ███   ███ ▄███▀ ███    ███ ███▀▀▀██▄ 
+███      ███    ███ ███    █▀    ███▐██▀   ███    ███ ███   ███ 
+███      ███    ███ ███         ▄█████▀    ███    ███ ███   ███ 
+███      ███    ███ ███        ▀▀█████▄    ███    ███ ███   ███ 
+███      ███    ███ ███    █▄    ███▐██▄   ███    ███ ███   ███ 
+███▌    ▄███    ███ ███    ███   ███ ▀███▄ ███    ███ ███   ███ 
+█████▄▄██ ▀██████▀  ████████▀    ███   ▀█▀  ▀██████▀   ▀█   █▀  
+▀                                 ▀                              
+"""
+
+LOCKON_ART_CYBER = r"""
+┏┓  ┏━┓┏━╸╻┏ ┏━┓┏┓╻
+┃   ┃ ┃┃  ┣┻┓┃ ┃┃┗┫
+┗┛  ┗━┛┗━╸╹ ╹┗━┛╹ ╹
+[SYSTEM.INITIALIZED]
+"""
+
+LOCKON_ART_MINIMAL = r"""
  _               _     ___
 | |    ___   ___| | __/ _ \ _ __
 | |   / _ \ / __| |/ / | | | '_ \
@@ -43,14 +78,86 @@ LOCKON_ART = r"""
 |_____\___/ \___|_|\_\\___/|_| |_|
 """
 
+# Animated logo parts for assembly effect
+LOGO_PARTS = [
+    ("╔═╗", 0, 0),
+    ("║ ║", 0, 1),
+    ("╚═╝", 0, 2),
+    ("╔═╗", 5, 0),
+    ("║ ║", 5, 1),
+    ("╚═╝", 5, 2),
+    ("╔═╗", 10, 0),
+    ("║  ", 10, 1),
+    ("╚═╝", 10, 2),
+    ("╔═╗", 15, 0),
+    ("╠╩╗", 15, 1),
+    ("╩ ╩", 15, 2),
+    ("╦╔═", 20, 0),
+    ("║ ║", 20, 1),
+    ("╚═╝", 20, 2),
+    ("╔═╗", 25, 0),
+    ("║║║", 25, 1),
+    ("╝╚╝", 25, 2),
+    ("╔╗╔", 30, 0),
+    ("║║║", 30, 1),
+    ("╝╚╝", 30, 2),
+]
+
+
+def _cyberpunk_gradient(text: str, offset: int = 0) -> Text:
+    """Create a cyberpunk-style gradient with neon colors."""
+    result = Text()
+    colors = [
+        "#ff006e", "#fb5607", "#ffbe0b", "#8338ec", "#3a86ff",
+        "#06ffa5", "#ff006e"  # Loop back
+    ]
+    
+    for i, char in enumerate(text):
+        if char == ' ':
+            result.append(char)
+        else:
+            pos = ((i + offset) % len(text)) / max(len(text) - 1, 1)
+            color_idx = int(pos * (len(colors) - 1))
+            color = colors[color_idx]
+            
+            # Add glow effect randomly
+            if random.random() > 0.8:
+                result.append(char, style=f"bold {color} on {color}33")
+            else:
+                result.append(char, style=f"bold {color}")
+    
+    return result
+
 
 def _gradient_line(line: str, offset: int = 0) -> Text:
+    """Enhanced gradient with multiple color schemes."""
     text = Text()
     n = max(len(line) - 1, 1)
+    
+    # Choose random gradient style
+    gradient_style = random.choice(['neon', 'fire', 'ocean', 'rainbow'])
+    
     for i, ch in enumerate(line):
         pos = ((i + offset) % len(line)) / n
-        color = _blend("#00eaff", "#ff00d0", pos)
+        
+        if gradient_style == 'neon':
+            color = _blend("#00eaff", "#ff00d0", pos)
+        elif gradient_style == 'fire':
+            if pos < 0.5:
+                color = _blend("#ff0000", "#ff8800", pos * 2)
+            else:
+                color = _blend("#ff8800", "#ffff00", (pos - 0.5) * 2)
+        elif gradient_style == 'ocean':
+            color = _blend("#001f3f", "#00bfff", pos)
+        else:  # rainbow
+            hue = pos * 360
+            r = int((math.sin(math.radians(hue)) + 1) * 127.5)
+            g = int((math.sin(math.radians(hue + 120)) + 1) * 127.5)
+            b = int((math.sin(math.radians(hue + 240)) + 1) * 127.5)
+            color = f"#{r:02x}{g:02x}{b:02x}"
+        
         text.append(ch, style=color)
+    
     return text
 
 
@@ -69,29 +176,196 @@ def _blend(c1: str, c2: str, t: float) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def show_setup_banner() -> None:
+def animated_logo_assembly():
+    """Assemble the logo piece by piece with effects."""
     console.clear()
-    lines = LOCKON_ART.strip("\n").splitlines()
-    with NeonPulseBorder(speed=0.05):
-        for step in range(30):
-            console.clear()
-            for line in lines:
-                console.print(_gradient_line(line, step), justify="center")
-            time.sleep(0.05)
+    grid = [[' ' for _ in range(35)] for _ in range(3)]
+    
+    for part, x, y in LOGO_PARTS:
+        # Add each part with a flash effect
+        for i, char in enumerate(part):
+            if 0 <= y < 3 and 0 <= x + i < 35:
+                grid[y][x + i] = char
+        
+        # Render current state with effects
+        console.clear()
+        for row_idx, row in enumerate(grid):
+            line = ''.join(row)
+            console.print(_cyberpunk_gradient(line, row_idx * 5), justify="center")
+        
+        time.sleep(0.05)
+    
+    # Final flash effect
+    for _ in range(3):
+        console.clear()
+        time.sleep(0.1)
+        for row in grid:
+            line = ''.join(row)
+            console.print(Text(line, style="bold white on cyan"), justify="center")
+        time.sleep(0.1)
 
+
+def matrix_intro():
+    """Show a Matrix-style rain intro."""
+    matrix = MatrixRain(width=80, height=20)
+    
+    for step in range(50):
+        console.clear()
+        console.print(matrix.render(step))
+        
+        # Gradually reveal the logo
+        if step > 25:
+            opacity = (step - 25) / 25
+            logo_lines = LOCKON_ART_CYBER.strip().split('\n')
+            y_offset = 8
+            
+            for i, line in enumerate(logo_lines):
+                if random.random() < opacity:
+                    console.print(
+                        _cyberpunk_gradient(line, step),
+                        justify="center",
+                        style=f"bold"
+                    )
+        
+        time.sleep(0.05)
+
+
+def fireworks_celebration():
+    """Display a fireworks show."""
+    fw = AsciiFireworks(width=console.width, height=25)
+    
+    for step in range(100):
+        fw.launch()
+        fw.update()
+        
+        console.clear()
+        console.print(fw.render())
+        
+        # Show success message in the middle
+        if step > 30:
+            console.print("\n" * 10)
+            console.print(
+                Align.center(
+                    Text("✨ INSTALLATION COMPLETE! ✨", style="bold green"),
+                    vertical="middle"
+                )
+            )
+        
+        time.sleep(0.05)
+
+
+def show_setup_banner() -> None:
+    """Enhanced setup banner with multiple effects."""
+    
+    # Choose random intro effect
+    intro_effects = [
+        ("matrix", matrix_intro),
+        ("assembly", animated_logo_assembly),
+        ("classic", lambda: classic_gradient_intro()),
+        ("glitch", lambda: glitch_intro()),
+        ("particle", lambda: particle_intro())
+    ]
+    
+    effect_name, effect_func = random.choice(intro_effects)
+    
+    # Run the chosen effect
+    effect_func()
+    
+    # Show loading progress with custom animation
     with Progress(
         SpinnerColumn(style="bold magenta"),
+        "[progress.description]{task.description}",
         BarColumn(bar_width=None),
+        "[progress.percentage]{task.percentage:>3.0f}%",
         TimeElapsedColumn(),
         console=console,
         transient=True,
     ) as progress:
-        task = progress.add_task("Initializing", total=100)
-        for _ in range(100):
+        task = progress.add_task("🚀 Initializing LockOn", total=100)
+        
+        for i in range(100):
             progress.update(task, advance=1)
-            time.sleep(0.01)
+            
+            # Update description with fun messages
+            if i == 25:
+                progress.update(task, description="🔧 Configuring quantum flux capacitor")
+            elif i == 50:
+                progress.update(task, description="⚡ Charging neon circuits")
+            elif i == 75:
+                progress.update(task, description="🌟 Activating hyperdrive")
+            
+            time.sleep(0.02)
+    
+    # Final banner
+    console.rule("[bold cyan]═══ LockOn Setup Complete ═══")
+    console.print()
 
-    console.rule("[bold cyan]LockOn Setup")
+
+def classic_gradient_intro():
+    """Classic gradient animation with enhancements."""
+    lines = LOCKON_ART_MINIMAL.strip("\n").splitlines()
+    
+    with NeonPulseBorder(speed=0.05, effect="rainbow"):
+        for step in range(30):
+            console.clear()
+            
+            # Add particle effects behind text
+            particles = ParticleField(width=console.width, height=len(lines) + 4, particles=30)
+            particles.update()
+            console.print(particles.render())
+            
+            console.print()  # Spacing
+            
+            for line in lines:
+                console.print(_gradient_line(line, step), justify="center")
+            
+            time.sleep(0.05)
+
+
+def glitch_intro():
+    """Glitch effect intro."""
+    logo_lines = LOCKON_ART_BLOCKS.strip().split('\n')
+    
+    for intensity in [0.8, 0.6, 0.4, 0.2, 0.1, 0.05, 0]:
+        console.clear()
+        
+        for line in logo_lines:
+            if intensity > 0:
+                console.print(
+                    Align.center(GlitchText.glitch(line, intensity)),
+                    vertical="middle"
+                )
+            else:
+                console.print(
+                    Align.center(_cyberpunk_gradient(line)),
+                    vertical="middle"
+                )
+        
+        time.sleep(0.2)
+
+
+def particle_intro():
+    """Particle field intro."""
+    particles = ParticleField(width=console.width, height=console.height - 5, particles=100)
+    logo_lines = LOCKON_ART_3D.strip().split('\n')
+    
+    for step in range(40):
+        console.clear()
+        
+        # Update and render particles
+        particles.update()
+        console.print(particles.render())
+        
+        # Overlay logo with increasing opacity
+        if step > 10:
+            console.print("\n" * 8)  # Position logo
+            for line in logo_lines:
+                console.print(
+                    Align.center(_cyberpunk_gradient(line, step)),
+                    vertical="middle"
+                )
+        
+        time.sleep(0.05)
 
 
 def check_python_version() -> None:
@@ -124,10 +398,10 @@ def update_repo() -> None:
         ).strip()
         remote, remote_branch = upstream.split("/", 1)
         try:
-            with NeonPulseBorder():
+            with NeonPulseBorder(effect="wave"):
                 run_with_spinner(
                     ["git", "fetch", remote],
-                    message="Fetching updates",
+                    message="🌐 Fetching updates from the matrix",
                 )
         except subprocess.CalledProcessError as exc:
             log(f"Failed to fetch updates: {exc}")
@@ -145,14 +419,14 @@ def update_repo() -> None:
         ahead, behind = map(int, ahead_behind.split())
         if behind:
             log(f"Repository behind upstream by {behind} commit(s); pulling...")
-            with NeonPulseBorder():
+            with NeonPulseBorder(effect="pulse"):
                 run_with_spinner(
                     ["git", "pull", "--ff-only", remote, remote_branch],
-                    message="Pulling updates",
+                    message="⬇️  Downloading updates",
                 )
-            log("Repository updated.")
+            log("✅ Repository updated.")
         else:
-            log("Repository is up to date.")
+            log("✨ Repository is up to date.")
     except Exception as exc:
         log(f"Failed to update repository: {exc}")
 
@@ -188,17 +462,15 @@ VENV_DIR = get_venv_dir()
 DEV_PACKAGES = ["debugpy", "flake8"]
 
 
-
-
 def ensure_venv(venv_dir: Path = VENV_DIR, *, python: str | None = None) -> Path:
     if sys.prefix != sys.base_prefix:
         return Path(sys.executable)
 
     if not venv_dir.exists():
         py_exe = python or sys.executable
-        log(f"Creating virtual environment at {venv_dir} using {py_exe}")
-        with NeonPulseBorder():
-            run_with_spinner([py_exe, "-m", "venv", str(venv_dir)], message="Creating virtualenv")
+        log(f"🏗️  Creating virtual environment at {venv_dir} using {py_exe}")
+        with NeonPulseBorder(effect="rainbow"):
+            run_with_spinner([py_exe, "-m", "venv", str(venv_dir)], message="🌈 Creating virtualenv")
 
     python_path = venv_dir / "bin" / "python"
     if not python_path.exists():
@@ -209,12 +481,12 @@ def ensure_venv(venv_dir: Path = VENV_DIR, *, python: str | None = None) -> Path
 def _pip(args: Iterable[str], python: Path | None = None, *, upgrade_pip: bool = False) -> None:
     py = python or ensure_venv()
     if upgrade_pip:
-        with NeonPulseBorder():
-            run_with_spinner([str(py), "-m", "pip", "install", "--upgrade", "pip"], message="Upgrading pip")
+        with NeonPulseBorder(effect="wave"):
+            run_with_spinner([str(py), "-m", "pip", "install", "--upgrade", "pip"], message="⬆️  Upgrading pip")
     cmd = [str(py), "-m", "pip", *args]
-    log("Running: " + " ".join(cmd))
-    with NeonPulseBorder():
-        run_with_spinner(cmd, message="Installing dependencies")
+    log("🔧 Running: " + " ".join(cmd))
+    with NeonPulseBorder(effect="pulse"):
+        run_with_spinner(cmd, message="📦 Installing dependencies")
 
 
 def run_tests(extra: Iterable[str] | None = None) -> None:
@@ -222,14 +494,14 @@ def run_tests(extra: Iterable[str] | None = None) -> None:
     cmd = [str(python), "-m", "pytest", "-q"]
     if extra:
         cmd.extend(extra)
-    log("Running: " + " ".join(cmd))
+    log("🧪 Running: " + " ".join(cmd))
     subprocess.check_call(cmd)
 
 
 def freeze_requirements(output: Path = ROOT_DIR / "requirements.lock") -> None:
     """Write installed packages to a lock file."""
     python = ensure_venv()
-    log(f"Freezing installed packages to {output}")
+    log(f"🧊 Freezing installed packages to {output}")
     with open(output, "w") as fh:
         subprocess.check_call([str(python), "-m", "pip", "freeze"], stdout=fh)
 
@@ -239,7 +511,7 @@ def ensure_requirements(req_path: Path = REQUIREMENTS_FILE) -> None:
     import pkg_resources
 
     if not req_path.is_file():
-        log(f"Requirements file {req_path} not found")
+        log(f"📄 Requirements file {req_path} not found")
         return
 
     for line in req_path.read_text().splitlines():
@@ -249,7 +521,7 @@ def ensure_requirements(req_path: Path = REQUIREMENTS_FILE) -> None:
         try:
             pkg_resources.require(req)
         except (pkg_resources.DistributionNotFound, pkg_resources.VersionConflict):
-            log(f"Installing missing or outdated package: {req}", level="warning")
+            log(f"⚠️  Installing missing or outdated package: {req}", level="warning")
             _pip(["install", req])
 
 
@@ -267,17 +539,17 @@ def install(
     py = ensure_venv()
     req_path = requirements or REQUIREMENTS_FILE
     if req_path.is_file():
-        log(f"Installing requirements from {req_path}")
+        log(f"📦 Installing requirements from {req_path}")
         args = ["install", "-r", str(req_path)]
         if upgrade:
             args.append("--upgrade")
         _pip(args, python=py, upgrade_pip=upgrade)
         ensure_requirements(req_path)
     else:
-        log(f"Requirements file {req_path} not found")
+        log(f"📄 Requirements file {req_path} not found")
 
     if extras and EXTRAS_FILE.is_file():
-        log(f"Installing optional packages from {EXTRAS_FILE}")
+        log(f"✨ Installing optional packages from {EXTRAS_FILE}")
         args = ["install", "-r", str(EXTRAS_FILE)]
         if upgrade:
             args.append("--upgrade")
@@ -285,7 +557,7 @@ def install(
         ensure_requirements(EXTRAS_FILE)
 
     if dev:
-        log("Installing development packages")
+        log("🛠️  Installing development packages")
         for pkg in DEV_PACKAGES:
             args = ["install", pkg]
             if upgrade:
@@ -293,14 +565,18 @@ def install(
             _pip(args, python=py)
 
     ensure_config()
-    log("Dependencies installed.")
+    
+    # Show completion animation
+    fireworks_celebration()
+    
+    log("✅ Dependencies installed successfully!")
 
 
 def check_outdated(requirements: Path | None = None, *, upgrade: bool = False) -> None:
     os.chdir(ROOT_DIR)
     req_path = requirements or REQUIREMENTS_FILE
     if not req_path.is_file():
-        log(f"Requirements file {req_path} not found")
+        log(f"📄 Requirements file {req_path} not found")
         return
     result = subprocess.run(
         [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"],
@@ -313,19 +589,31 @@ def check_outdated(requirements: Path | None = None, *, upgrade: bool = False) -
     except Exception:
         pkgs = []
     if pkgs:
-        log("Packages with updates available:\n" + "\n".join(pkgs))
+        log("📊 Packages with updates available:\n" + "\n".join(pkgs))
         if upgrade:
-            log("Upgrading packages...")
+            log("⬆️  Upgrading packages...")
             names = [p.split()[0] for p in pkgs]
             _pip(["install", "--upgrade", *names])
     else:
-        log("All packages up to date.")
+        log("✨ All packages up to date.")
 
 
 def show_info() -> None:
-    print(f"Project Root: {ROOT_DIR}")
-    print(f"Virtualenv: {VENV_DIR}")
-    print(get_system_info())
+    # Create a fancy info panel
+    info_text = f"""
+🏠 Project Root: {ROOT_DIR}
+🐍 Virtualenv: {VENV_DIR}
+{get_system_info()}
+    """
+    
+    panel = Panel(
+        Align.center(Text(info_text.strip(), style="cyan")),
+        title="[bold magenta]LockOn System Information",
+        border_style="bright_blue",
+        padding=(1, 2),
+    )
+    
+    console.print(panel)
 
 
 def doctor() -> None:
@@ -336,7 +624,16 @@ def doctor() -> None:
     check_outdated()
     ensure_requirements()
     freeze_requirements()
-    log("Environment looks good!")
+    
+    # Success animation
+    console.print()
+    console.print(
+        Panel(
+            Align.center(Text("✅ Environment looks good!", style="bold green")),
+            border_style="green",
+            padding=(1, 2),
+        )
+    )
 
 
 if __name__ == "__main__":
@@ -385,9 +682,9 @@ if __name__ == "__main__":
         import shutil
         if VENV_DIR.exists():
             shutil.rmtree(VENV_DIR)
-            log("Virtualenv removed.")
+            log("✅ Virtualenv removed.")
         else:
-            log("No virtualenv to remove.")
+            log("❌ No virtualenv to remove.")
     elif args.command == "test":
         run_tests(args.extra)
     elif args.command == "freeze":
@@ -402,5 +699,3 @@ if __name__ == "__main__":
             extras=getattr(args, "extras", False),
             skip_update=getattr(args, "skip_update", False),
         )
-
-
