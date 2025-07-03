@@ -19,3 +19,4 @@ venv/
 /data/*.db
 /data/logs/
 /data/local_debug.pid
+/data/

@@ -309,6 +309,12 @@ The repository includes a `.vscode/launch.json` configuration. Open the folder
 in Visual Studio Code and run the **Run LockOn** launch target to start the
 application under the debugger.
 
+Import resolution in VS Code relies on the `.env` file in the repository
+root which sets `PYTHONPATH=./src`. The Python extension picks this up
+automatically so Pylance recognizes modules like `core` and `security`.
+If you relocate the env file be sure to update your `python.envFile`
+setting accordingly.
+
 To debug inside the Vagrant VM simply run the helper script:
 
 ```bash
