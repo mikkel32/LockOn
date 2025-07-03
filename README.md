@@ -16,7 +16,36 @@ Lock On is an advanced folder security monitoring system that uses intelligent p
 - **Pattern-based Detection**: Recognizes ransomware, trojans, and other malware patterns
 - **Behavioral Analysis**: Identifies suspicious activities based on behavior patterns
 - **Machine Learning**: Adaptive threat detection that learns from events
-- **YARA Integration**: Professional malware detection rules
+- **YARA Integration**: Built-in malware signatures with customizable rules, including the EICAR test pattern and macro detection
+- **Encoded Command Detection**: Spots base64-encoded PowerShell or shell commands
+- **Reverse Shell Detection**: Identifies common bash or netcat reverse shells
+- **PowerView and Invoke-Shellcode Detection**: Spots offensive PowerShell frameworks and shellcode loaders
+- **Invoke-Obfuscation and Empire Detection**: Identifies advanced PowerShell attack frameworks
+- **PsExec and MSBuild Detection**: Flags lateral-movement and malicious build abuse
+- **InstallUtil Abuse Detection**: Detects persistence via InstallUtil commands
+- **Shellcode Loader Detection**: Flags VirtualAllocEx/WriteProcessMemory sequences
+- **Process Hollowing Detection**: Identifies NtUnmapViewOfSection and CreateRemoteThread combos
+- **RAT Detection**: Identifies tools like njRAT, DarkComet and AgentTesla
+- **Packed Binary Detection**: Spots UPX-packed executables
+- **Unsigned Binary Detection**: Flags unsigned Windows executables
+- **Archive Scanning**: Detects malicious macros and executables inside ZIP-based formats
+- **Downloader Detection**: Flags certutil or rundll32 commands used for malware retrieval
+- **Suspicious IP Monitoring**: Alerts on embedded IP addresses with port numbers
+- **Deep YARA Scanning**: In-memory scanning of file contents and archives using custom rules
+- **Process Command-Line Scanning**: Flags malicious payloads in running processes
+- **Network Connection Scanning**: Detects suspicious outbound ports or IP addresses
+- **Real-time Network Monitor**: Background thread flags suspicious outbound connections
+- **Connection Risk Analysis**: Suspicious IPs and ports are classified with threat levels using `PatternAnalyzer`
+- **Connection Event Caching**: Duplicate alerts are suppressed with a short-term cache
+- **Debug Privilege Elevation**: Network monitor automatically acquires `SeDebugPrivilege` on Windows for deeper inspection
+- **Meterpreter/CobaltStrike Detection**: Identifies penetration testing tool artifacts
+- **Netsh Tunneling Detection**: Spots firewall or portproxy commands used for C2
+- **Unified Hash and YARA Scanning**: Central scanner hashes files and applies signatures
+- **Webhook URL Detection**: Flags exfiltration via Discord, Pastebin or GitHub webhooks
+- **Cached Scanning**: Reuses file scan results to speed up repeated checks
+- **AutoIt Detection**: Identifies compiled AutoIt scripts
+- **Keylogger API Detection**: Flags binaries using keystroke APIs
+- **Discord Token Stealer Detection**: Spots token-stealing payloads
 
 ### ⚡ Response System
 - **Automatic Quarantine**: Isolates threats instantly with encryption
@@ -48,6 +77,24 @@ python setup.py doctor
 
 The `--extras` flag installs additional features listed in
 `requirements-optional.txt`.
+
+For full malware detection capabilities you also need the
+`yara-python` package which is included in `requirements.txt`.
+If you installed dependencies manually make sure to run:
+
+```bash
+pip install yara-python>=4.3.0
+pip install pefile>=2023.2.7  # for signed executable detection
+```
+
+On Windows, compile `native/privileges.cpp` into `privileges.dll` to enable
+service hardening:
+
+```cmd
+cl /LD native\privileges.cpp /Fe:native\privileges.dll
+```
+The DLL is loaded automatically at startup and used to elevate and verify
+required privileges for critical actions.
 
 ### Basic Usage
 
@@ -178,10 +225,41 @@ monitor.start()
 
 ### Threat Detection
 - Pattern matching with regular expressions
-- YARA rule scanning
+- YARA rule scanning with built-in signatures
+- Detection of EICAR test files and malicious Office macros
+- Detection of base64-encoded command payloads
+- Detection of reverse shell commands and malicious downloads
+- Detection of certutil and rundll32 download commands
+- Detection of Invoke-Obfuscation and Empire frameworks
+- Detection of PsExec lateral movement and MSBuild abuse
+   - Detection of InstallUtil persistence mechanisms
+   - Detection of shellcode loaders using VirtualAllocEx and WriteProcessMemory
+   - Detection of process hollowing API sequences
+   - Detection of RAT families such as njRAT, DarkComet, and AgentTesla
+   - Detection of UPX-packed executables
+   - Detection of unsigned executables on Windows
+   - Detection of embedded IP addresses with ports
+   - Detection of malicious content inside archives
+- Process command-line scanning for malicious patterns
+- Detection of suspicious environment variables in running processes
+- Environment variable analysis is handled by the Intelligence Engine so new patterns automatically apply
+- Detection of meterpreter and Cobalt Strike artifacts
+- Detection of netsh-based tunneling commands
+- Detection of webhook URLs used for data exfiltration
+- Detection of AutoIt compiled scripts
+- Detection of keylogger APIs
+- Detection of Discord token-stealer behavior
 - Heuristic analysis
 - Entropy calculation
 - Behavioral anomaly detection
+- Windows service hardening via privilege elevation and verification
+- Automatic privilege elevation at startup when the optional native helper is
+  available
+- Unified `PrivilegeManager` acquires and verifies required privileges on startup
+- Network monitor requests debug rights on Windows for accurate connection logging
+- Decorator `require_privileges` ensures sensitive functions obtain rights and raises `PermissionError` when privileges are missing
+- Privileges are re-verified during monitoring loops to prevent privilege loss
+- Background privilege monitor periodically reacquires dropped rights
 
 ### Response Actions
 - File quarantine with encryption
@@ -252,6 +330,12 @@ python scripts/manage_vm.py start
 `manage_vm.py` dynamically selects a **Vagrant**, **Docker**, or **local**
 backend using an internal `EnvironmentManager` so the same commands work in any
 environment.
+After starting, run:
+
+```bash
+python scripts/manage_vm.py doctor
+```
+to verify that the debug server is running and `debugpy` is installed.
 
 The helper also supports additional subcommands regardless of whether it is controlling Vagrant or Docker:
 

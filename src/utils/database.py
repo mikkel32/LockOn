@@ -2,7 +2,9 @@ import sqlite3
 import threading
 from pathlib import Path
 
-DB_PATH = Path("data/database.db")
+from .paths import resource_path
+
+DB_PATH = resource_path("data", "database.db")
 
 
 class Database:

@@ -4,6 +4,7 @@ Folder Monitor - Real-time file system monitoring with threat detection
 import os
 import time
 import threading
+import sys
 import hashlib
 from pathlib import Path
 from datetime import datetime
@@ -97,16 +98,25 @@ from utils.psutil_compat import psutil
 from core.analyzer import PatternAnalyzer
 from core.enforcer import ActionEnforcer
 from utils.logger import SecurityLogger
+from security.network_monitor import NetworkMonitor
 
 
 class FolderMonitor(FileSystemEventHandler):
     """Advanced folder monitoring system"""
 
-    def __init__(self):
+    def __init__(self, priv_manager: "PrivilegeManager | None" = None):
         super().__init__()
         self.logger = SecurityLogger()
         self.analyzer = PatternAnalyzer()
-        self.enforcer = ActionEnforcer()
+        from security.privileges import PrivilegeManager
+        self.priv_manager = priv_manager or PrivilegeManager(auto_monitor=True)
+        self.enforcer = ActionEnforcer(priv_manager=self.priv_manager)
+        self.net_monitor = NetworkMonitor(
+            self.analyzer.intelligence.patterns,
+            priv_manager=self.priv_manager,
+            analyzer=self.analyzer,
+        )
+        self.net_monitor.on_suspicious = self._handle_network_threat
 
         self.target_folder: Optional[Path] = None
         self.observer: Optional[Observer] = None
@@ -125,6 +135,8 @@ class FolderMonitor(FileSystemEventHandler):
         self.file_hashes: Dict[str, str] = {}
         self.file_activity: Dict[str, List[datetime]] = {}
         self.suspicious_processes: List[int] = []
+
+        self.on_network_threat: Optional[Callable] = None
 
         # Callbacks
         self.on_threat_detected: Optional[Callable] = None
@@ -182,6 +194,23 @@ class FolderMonitor(FileSystemEventHandler):
             self.logger.error("No target folder set")
             return
 
+        try:
+            from security.privileges import has_privilege, ALL_PRIVILEGES
+            missing = self.priv_manager.ensure(ALL_PRIVILEGES)
+            critical = [
+                "SeBackupPrivilege",
+                "SeRestorePrivilege",
+                "SeDebugPrivilege",
+                "SeSecurityPrivilege",
+            ]
+            missing += [p for p in critical if not has_privilege(p)]
+            if missing:
+                self.logger.warning(f"Missing privileges: {', '.join(sorted(set(missing)))}")
+            else:
+                self.logger.debug("All critical privileges enabled")
+        except Exception as exc:
+            self.logger.error(f"Privilege elevation failed: {exc}")
+
         self.monitoring = True
         self.stats['start_time'] = datetime.now()
 
@@ -194,6 +223,9 @@ class FolderMonitor(FileSystemEventHandler):
         self.process_monitor_thread = threading.Thread(target=self._monitor_processes)
         self.process_monitor_thread.daemon = True
         self.process_monitor_thread.start()
+
+        # Start network monitor
+        self.net_monitor.start()
 
         # Start periodic security scan
         self.scan_thread = threading.Thread(target=self._periodic_scan)
@@ -209,6 +241,8 @@ class FolderMonitor(FileSystemEventHandler):
         if self.observer:
             self.observer.stop()
             self.observer.join()
+
+        self.net_monitor.stop()
 
         self.logger.info("Monitoring stopped")
 
@@ -399,6 +433,11 @@ class FolderMonitor(FileSystemEventHandler):
     def _monitor_processes(self):
         """Monitor system processes for suspicious activity"""
         while self.monitoring:
+            if sys.platform == "win32":
+                try:
+                    self.priv_manager.ensure_active(["SeDebugPrivilege"], impersonate=False)
+                except Exception:
+                    pass
             try:
                 for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_info']):
                     try:
@@ -425,6 +464,11 @@ class FolderMonitor(FileSystemEventHandler):
             time.sleep(300)  # Every 5 minutes
 
             try:
+                if sys.platform == "win32":
+                    try:
+                        self.priv_manager.ensure_active(["SeDebugPrivilege"], impersonate=False)
+                    except Exception:
+                        pass
                 self.logger.debug("Running periodic security scan...")
 
                 # Check for new threats
@@ -491,6 +535,28 @@ class FolderMonitor(FileSystemEventHandler):
         # Implementation for watchlist
         self.logger.info(f"Added to watchlist: {filepath}")
 
+    def _handle_network_threat(self, conn) -> None:
+        """Handle suspicious network connection detected by NetworkMonitor."""
+        try:
+            ip = conn.raddr.ip
+            port = conn.raddr.port
+            pid = conn.pid
+        except Exception:
+            return
+        analysis = self.analyzer.analyze_connection(ip, port)
+        self.logger.warning(
+            f"Suspicious connection {ip}:{port} (PID {pid}) risk={analysis.level}"
+        )
+        if self.on_network_threat:
+            self.on_network_threat(conn)
+        if self.shield_active and pid:
+            try:
+                proc = psutil.Process(pid)
+                if self.analyzer.is_suspicious_process(proc) or analysis.level in ["high", "critical"]:
+                    self.enforcer.handle_suspicious_process(proc)
+            except Exception:
+                pass
+
     def activate_shield(self):
         """Activate protective shield"""
         self.shield_active = True
@@ -515,6 +581,8 @@ class FolderMonitor(FileSystemEventHandler):
         # Stop all threads
         if self.observer:
             self.observer.stop()
+
+        self.net_monitor.stop()
 
         # Terminate suspicious processes
         self._terminate_suspicious_processes()

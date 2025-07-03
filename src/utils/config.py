@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from .paths import resource_path
 import yaml
 
 CONFIG_ENV = "LOCKON_CONFIG"
-CONFIG_PATH = Path(os.environ.get(CONFIG_ENV, "config.yaml"))
+CONFIG_PATH = resource_path(*Path(os.environ.get(CONFIG_ENV, "config.yaml")).parts)
 
 
 def ensure_config(path: Path = CONFIG_PATH) -> None:
