@@ -4,8 +4,16 @@ Intelligence Engine - Advanced pattern analysis and threat detection
 import json
 import re
 import hashlib
+import zipfile
+import io
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
+from utils.paths import resource_path
+
+try:
+    from security.yara_scanner import YaraScanner  # type: ignore
+except Exception:
+    YaraScanner = None
 from datetime import datetime
 try:
     import numpy as np  # type: ignore
@@ -42,7 +50,7 @@ from collections import defaultdict
 class IntelligenceEngine:
     """Advanced intelligence and pattern matching engine"""
 
-    def __init__(self):
+    def __init__(self, yara_scanner: "YaraScanner | None" = None):
         self.patterns = self._load_patterns()
         self.rules = self._load_rules()
         self.behaviors = self._load_behaviors()
@@ -53,9 +61,16 @@ class IntelligenceEngine:
         self.threat_scores = {}
         self.ml_model = self._initialize_ml_model()
 
+        # Optional YARA scanner for signature detection
+        if yara_scanner:
+            self.yara_scanner = yara_scanner
+        else:
+            rules_path = resource_path("Intelligence", "yara_rules.yar")
+            self.yara_scanner = YaraScanner(rules_path) if YaraScanner else None
+
     def _load_patterns(self) -> Dict:
         """Load pattern definitions"""
-        pattern_file = Path("Intelligence/patterns.json")
+        pattern_file = resource_path("Intelligence", "patterns.json")
         if pattern_file.exists():
             try:
                 data = json.load(open(pattern_file, 'r'))
@@ -67,7 +82,7 @@ class IntelligenceEngine:
 
     def _load_rules(self) -> Dict:
         """Load security rules"""
-        rules_file = Path("Intelligence/rules.json")
+        rules_file = resource_path("Intelligence", "rules.json")
         if rules_file.exists():
             with open(rules_file, 'r') as f:
                 return json.load(f)
@@ -75,7 +90,7 @@ class IntelligenceEngine:
 
     def _load_behaviors(self) -> Dict:
         """Load behavior patterns"""
-        behaviors_file = Path("Intelligence/behaviors.json")
+        behaviors_file = resource_path("Intelligence", "behaviors.json")
         if behaviors_file.exists():
             with open(behaviors_file, 'r') as f:
                 return json.load(f)
@@ -83,7 +98,7 @@ class IntelligenceEngine:
 
     def _load_responses(self) -> Dict:
         """Load response strategies"""
-        responses_file = Path("Intelligence/responses.json")
+        responses_file = resource_path("Intelligence", "responses.json")
         if responses_file.exists():
             with open(responses_file, 'r') as f:
                 return json.load(f)
@@ -197,29 +212,134 @@ class IntelligenceEngine:
                 # Read first 1MB
                 content = f.read(1024 * 1024)
 
-            # Check for malicious signatures
-            content_hex = content.hex()
-            patterns = self.patterns.get('file_patterns', {}).get('content_patterns', {})
+            patterns_root = self.patterns.get('content_patterns', {})
+            file_patterns = self.patterns.get('file_patterns', {})
+            patterns = file_patterns.get('content_patterns', patterns_root)
 
-            for sig in patterns.get('malicious_signatures', []):
-                if sig.lower() in content_hex.lower():
-                    result['risk'] = 0.9
-                    result['matches'].append(f"Malicious signature found: {sig[:10]}...")
+            result = self._analyze_raw_content(content, patterns)
 
-            # Check for suspicious strings
-            try:
-                content_str = content.decode('utf-8', errors='ignore')
-                for string in patterns.get('suspicious_strings', []):
-                    if string.lower() in content_str.lower():
-                        result['risk'] = max(result['risk'], 0.6)
-                        result['matches'].append(f"Suspicious string: {string}")
-            except:
-                pass
+            if zipfile.is_zipfile(filepath):
+                zip_result = self._scan_zip_contents(filepath, patterns)
+                if zip_result['risk'] > result['risk']:
+                    result = zip_result
+                else:
+                    result['matches'].extend(zip_result['matches'])
 
         except Exception as e:
             # Can't read file
             pass
 
+        return result
+
+    def _analyze_raw_content(self, content: bytes, patterns: Dict) -> Dict[str, any]:
+        """Analyze raw *content* bytes using detection patterns."""
+        result = {'risk': 0.0, 'matches': []}
+
+        content_hex = content.hex()
+        if self.yara_scanner:
+            matches = self.yara_scanner.scan_bytes(content)
+            meta = self.yara_scanner.scan_bytes_meta(content)
+            if matches:
+                result['risk'] = max(result['risk'], 0.9)
+                result['matches'].extend([f"yara:{m}" for m in matches])
+                if meta:
+                    result.setdefault('yara_meta', []).extend(meta)
+        for sig in patterns.get('malicious_signatures', []):
+            if sig.lower() in content_hex.lower():
+                result['risk'] = 0.9
+                result['matches'].append(f"Malicious signature found: {sig[:10]}...")
+
+        try:
+            content_str = content.decode('utf-8', errors='ignore')
+            for string in patterns.get('suspicious_strings', []):
+                if string.lower() in content_str.lower():
+                    result['risk'] = max(result['risk'], 0.6)
+                    result['matches'].append(f"Suspicious string: {string}")
+
+            revshell_patterns = [
+                r"bash\s+-i\s+>&\s*/dev/tcp/",
+                r"nc\s+-e\s+/bin/sh",
+            ]
+            for pat in revshell_patterns:
+                if re.search(pat, content_str, re.IGNORECASE):
+                    result['risk'] = max(result['risk'], 0.9)
+                    result['matches'].append('Reverse shell command')
+                    break
+
+            ip_hits = re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b", content_str)
+            if ip_hits:
+                result['risk'] = max(result['risk'], 0.6)
+                result['matches'].append('Suspicious IP address')
+
+            import base64
+            encoded_strings = re.findall(r'[A-Za-z0-9+/=]{20,}', content_str)
+            for enc in encoded_strings:
+                try:
+                    decoded_bytes = base64.b64decode(enc)
+                    decoded = decoded_bytes.decode('utf-8', 'ignore').lower()
+                    if any(token in decoded for token in ['powershell', 'cmd.exe']):
+                        result['risk'] = max(result['risk'], 0.7)
+                        result['matches'].append('Suspicious base64 command')
+                        break
+                    if 'eicar-standard-antivirus-test-file' in decoded:
+                        result['risk'] = max(result['risk'], 0.9)
+                        result['matches'].append('EICAR signature (base64)')
+                        break
+                    if self.yara_scanner:
+                        ym = self.yara_scanner.scan_bytes(decoded_bytes)
+                        if ym:
+                            result['risk'] = max(result['risk'], 0.9)
+                            result['matches'].extend([f'yara:{m}' for m in ym])
+                            break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        return result
+
+    def _scan_zip_contents(self, filepath: Path | io.BytesIO, patterns: Dict, depth: int = 0) -> Dict[str, any]:
+        """Scan files inside zip archive for malicious patterns recursively."""
+        result = {'risk': 0.0, 'matches': []}
+        if depth > 2:
+            return result
+        try:
+            with zipfile.ZipFile(filepath, 'r') as zf:
+                for idx, name in enumerate(zf.namelist()):
+                    if idx >= 10:
+                        break
+                    try:
+                        data = zf.read(name)
+                    except Exception:
+                        continue
+                    sub = self._analyze_raw_content(data, patterns)
+                    if self.yara_scanner:
+                        yara_matches = self.yara_scanner.scan_bytes(data)
+                        meta = self.yara_scanner.scan_bytes_meta(data)
+                        if yara_matches:
+                            sub['risk'] = max(sub['risk'], 0.9)
+                            sub['matches'].extend([f"yara:{m}" for m in yara_matches])
+                            if meta:
+                                sub.setdefault('yara_meta', []).extend(meta)
+                    if zipfile.is_zipfile(io.BytesIO(data)):
+                        nested = self._scan_zip_contents(io.BytesIO(data), patterns, depth + 1)
+                        if nested['risk'] > sub['risk']:
+                            sub = nested
+                        else:
+                            sub['matches'].extend(nested['matches'])
+                            if 'yara_meta' in nested:
+                                sub.setdefault('yara_meta', []).extend(nested['yara_meta'])
+                    if sub['risk'] > result['risk']:
+                        result = sub
+                        result['matches'] = [f"{name}: {m}" for m in sub['matches']]
+                        if 'yara_meta' in sub:
+                            result['yara_meta'] = sub['yara_meta']
+                    elif sub['risk'] > 0:
+                        result['matches'].extend([f"{name}: {m}" for m in sub['matches']])
+                        if 'yara_meta' in sub:
+                            result.setdefault('yara_meta', []).extend(sub['yara_meta'])
+        except Exception:
+            pass
         return result
 
     def analyze_behavior(self, event_type: str, details: Dict) -> Dict[str, any]:
@@ -299,6 +419,54 @@ class IntelligenceEngine:
         normalized_score = 1 / (1 + np.exp(-score))  # Sigmoid
 
         return normalized_score
+
+    def analyze_network_connection(self, ip: str, port: int) -> Dict[str, any]:
+        """Analyze network connection attributes for potential risk."""
+        result = {
+            'risk_level': 'low',
+            'matches': [],
+            'confidence': 0.0,
+            'type': 'network_activity',
+        }
+        ports = self.patterns.get('suspicious_ports', [])
+        ips = self.patterns.get('suspicious_ips', [])
+        if port in ports:
+            result['risk_level'] = 'high'
+            result['confidence'] = 0.8
+            result['matches'].append(f'suspicious port {port}')
+            result['type'] = 'c2_communication'
+        if any(str(ip).startswith(prefix) for prefix in ips):
+            if result['risk_level'] != 'high':
+                result['risk_level'] = 'medium'
+                result['confidence'] = max(result['confidence'], 0.6)
+            result['matches'].append(f'suspicious ip {ip}')
+            result['type'] = 'c2_communication'
+        return result
+
+    def analyze_env_vars(self, env: Dict[str, str]) -> Dict[str, any]:
+        """Analyze process environment variables for suspicious entries."""
+        result = {
+            'risk_level': 'low',
+            'confidence': 0.0,
+            'matches': [],
+            'type': 'environment',
+        }
+
+        patterns = [p.lower() for p in self.patterns.get('suspicious_env_vars', [])]
+        if not patterns:
+            return result
+        for k, v in env.items():
+            combined = f"{k}={v}".lower()
+            for pat in patterns:
+                if pat in combined:
+                    result['matches'].append(pat)
+                    result['risk_level'] = 'medium'
+                    result['confidence'] = max(result['confidence'], 0.6)
+        if result['matches']:
+            if len(result['matches']) > 2:
+                result['risk_level'] = 'high'
+                result['confidence'] = max(result['confidence'], 0.8)
+        return result
 
     def learn_from_event(self, event: Dict, was_threat: bool):
         """Update ML model based on event feedback"""

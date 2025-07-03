@@ -13,6 +13,11 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 def main():
     """Initialize and run Lock On"""
+    try:
+        from security.privileges import PrivilegeManager, ALL_PRIVILEGES
+        PrivilegeManager(auto_monitor=True).ensure(ALL_PRIVILEGES)
+    except Exception:
+        pass
     # Check for display availability
     if not os.environ.get('DISPLAY') and sys.platform != 'win32':
         print("🔒 Lock On - Running in monitoring mode (no display)")

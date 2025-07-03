@@ -18,7 +18,8 @@ class SecurityLogger:
         return cls._instance
 
     def _initialize(self, log_file: Path | None, level: str) -> None:
-        self.log_path = log_file or Path("data/logs/security.log")
+        from .paths import resource_path
+        self.log_path = log_file or resource_path("data", "logs", "security.log")
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger("LockOn")
         self.logger.setLevel(getattr(logging, level.upper(), logging.DEBUG))

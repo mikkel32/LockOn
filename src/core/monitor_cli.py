@@ -7,6 +7,7 @@ import os
 from utils.logger import SecurityLogger
 from utils.config import load_config, ensure_config
 from utils.database import Database
+from utils.paths import resource_path
 from core.monitor import FolderMonitor
 
 
@@ -21,25 +22,27 @@ class LockOnCLI:
         debug: bool = False,
         debug_port: int = 5678,
     ) -> None:
-        cfg_path = config_path or Path("config.yaml")
+        cfg_path = config_path or resource_path("config.yaml")
         ensure_config(cfg_path)
         self.config = load_config(cfg_path)
         log_cfg = self.config.get("logging", {})
+        log_path = Path(log_cfg.get("file", "data/logs/security.log"))
         self.logger = SecurityLogger(
-            Path(log_cfg.get("file", "data/logs/security.log")),
+            resource_path(*log_path.parts),
             log_cfg.get("level", "DEBUG"),
         )
         self.monitor = FolderMonitor()
 
-        final_db = db_path or Path(
-            self.config.get("database", {}).get("path", "data/database.db")
-        )
+        db_conf = self.config.get("database", {}).get("path", "data/database.db")
+        conf_parts = Path(db_conf).parts
+        final_db = db_path or resource_path(*conf_parts)
         self.db = Database(final_db)
         self.debug = debug
         self.debug_port = debug_port
 
         self.monitor.on_file_changed = self._log_file_event
         self.monitor.on_threat_detected = self._log_threat
+        self.monitor.on_network_threat = self._log_network_threat
 
         folder_setting = folder or self.config.get("monitor", {}).get("paths", [None])[0]
         if folder_setting:
@@ -80,6 +83,13 @@ class LockOnCLI:
     def _log_threat(self, filepath, risk) -> None:
         """Callback to log detected threats."""
         self.db.log_threat(str(filepath), risk.level, risk.type)
+
+    def _log_network_threat(self, conn) -> None:
+        try:
+            entry = f"{conn.pid}:{conn.raddr.ip}:{conn.raddr.port}"
+        except Exception:
+            entry = str(conn)
+        self.db.log_threat(entry, "high", "network")
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -147,8 +157,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "run":
         LockOnCLI(args.config, args.folder, args.db, args.debug, args.debug_port).run()
     else:
-        cfg = load_config(args.config or Path("config.yaml"))
-        db_path = Path(args.db or cfg.get("database", {}).get("path", "data/database.db"))
+        cfg = load_config(args.config or resource_path("config.yaml"))
+        db_conf = cfg.get("database", {}).get("path", "data/database.db")
+        db_path = resource_path(*Path(args.db or db_conf).parts)
         if args.command == "events":
             _print_events(db_path, args.limit)
         elif args.command == "threats":

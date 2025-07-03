@@ -68,7 +68,7 @@ def test_custom_logger_path(tmp_path):
     assert log_file.exists()
 
 
-def test_lockoncli_debug_port(monkeypatch):
+def test_lockoncli_debug_port(monkeypatch, tmp_path):
     args = monitor_cli._parse_args(["run", "--debug", "--debug-port", "6001"])
     captured = {}
 
@@ -80,7 +80,7 @@ def test_lockoncli_debug_port(monkeypatch):
             captured["wait"] = True
 
     monkeypatch.setitem(sys.modules, "debugpy", FakeDebugPy())
-    cli = LockOnCLI(None, debug=args.debug, debug_port=args.debug_port)
+    cli = LockOnCLI(None, folder=str(tmp_path), debug=args.debug, debug_port=args.debug_port)
     monkeypatch.setattr(cli.monitor, "start", lambda: None)
     monkeypatch.setattr(cli.monitor, "stop", lambda: None)
     monkeypatch.setattr(cli.db, "close", lambda: None)
