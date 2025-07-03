@@ -5,5 +5,7 @@ monitor:
   paths:
     - .
   recursive: true
+  watch_interval: 30
+  watchlist: []
 database:
   path: data/database.db

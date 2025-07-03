@@ -15,7 +15,12 @@ def ensure_config(path: Path = CONFIG_PATH) -> None:
         return
     sample = {
         "logging": {"file": "data/logs/app.log", "level": "INFO"},
-        "monitor": {"paths": ["."], "recursive": True},
+        "monitor": {
+            "paths": ["."],
+            "recursive": True,
+            "watch_interval": 30,
+            "watchlist": [],
+        },
         "database": {"path": "data/database.db"},
     }
     path.parent.mkdir(parents=True, exist_ok=True)

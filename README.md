@@ -11,6 +11,11 @@ Lock On is an advanced folder security monitoring system that uses intelligent p
 - **AI Pattern Recognition**: Intelligent analysis of file operations and process behaviors
 - **Multi-layered Security**: File scanning, process monitoring, and network protection
 - **Honeypot System**: Deploy decoy files to catch malicious actors
+- **Concurrent Scanning**: Uses multiple threads to rapidly baseline files
+- **Adaptive Watchlist Scanning**: Watchlist interval shortens when new threats appear
+- **CLI File Tree**: Generate an ASCII tree of monitored files from the command line
+- **CLI Statistics**: Summarize logged events and threats at a glance
+- **Process & Network Logging**: Suspicious processes and network connections are stored in the database
 
 ### 🧠 Intelligence Engine
 - **Pattern-based Detection**: Recognizes ransomware, trojans, and other malware patterns
@@ -43,6 +48,7 @@ Lock On is an advanced folder security monitoring system that uses intelligent p
 - **Unified Hash and YARA Scanning**: Central scanner hashes files and applies signatures
 - **Webhook URL Detection**: Flags exfiltration via Discord, Pastebin or GitHub webhooks
 - **Cached Scanning**: Reuses file scan results to speed up repeated checks
+- **Persistent Baseline Hashes**: File hashes are stored in the database and reused across runs
 - **AutoIt Detection**: Identifies compiled AutoIt scripts
 - **Keylogger API Detection**: Flags binaries using keystroke APIs
 - **Discord Token Stealer Detection**: Spots token-stealing payloads
@@ -207,18 +213,15 @@ LockOn> permissions
 
 ```python
 from core.monitor import FolderMonitor
-from core.intelligence import IntelligenceEngine
 
-# Initialize monitor
-monitor = FolderMonitor()
-monitor.set_target_folder("/important/data")
-
-# Set callbacks
-monitor.on_threat_detected = handle_threat
-monitor.on_file_changed = handle_change
-
-# Start monitoring
-monitor.start()
+# Initialize and use as a context manager so monitoring
+# stops automatically when the block exits
+with FolderMonitor() as monitor:
+    monitor.set_target_folder("/important/data")
+    monitor.on_threat_detected = handle_threat
+    monitor.on_file_changed = handle_change
+    monitor.start()
+    ...  # application logic
 ```
 
 ## 🔒 Security Features
@@ -418,6 +421,31 @@ To inspect logged information without starting monitoring, use the subcommands
 python -m core.monitor_cli events --limit 5
 python -m core.monitor_cli threats --limit 5
 ```
+To save logs for offline analysis, use the `export` command which writes CSV files:
+
+```bash
+python -m core.monitor_cli export events events.csv
+python -m core.monitor_cli export threats threats.csv
+```
+To view the monitored file tree for a folder without starting the UI:
+
+```bash
+python -m core.monitor_cli tree -f /path/to/folder
+```
+
+Watchlist paths are persisted in the database and can be managed directly:
+
+```bash
+python -m core.monitor_cli watch add /tmp/suspicious.exe
+python -m core.monitor_cli watch list
+python -m core.monitor_cli watch scan
+```
+Show database statistics like logged events and threats:
+
+```bash
+python -m core.monitor_cli stats --db data/database.db
+```
+This prints the total events, threats, watchlist entries and stored file hashes.
 
 ### Running inside Vagrant
 

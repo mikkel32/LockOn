@@ -12,6 +12,8 @@ from src.core.monitor import FolderMonitor
 from src.core.analyzer import PatternAnalyzer
 from src.core.permissions import PermissionManager
 from src.security.scanner import Scanner
+from utils.database import Database
+from utils.psutil_compat import psutil
 
 
 class TestFolderMonitor(unittest.TestCase):
@@ -66,6 +68,204 @@ class TestFolderMonitor(unittest.TestCase):
         time.sleep(1)
 
         self.assertGreater(len(threats_detected), 0)
+
+    def test_file_tree_generation(self):
+        """FolderMonitor should build a tree of tracked files."""
+        self.monitor.start()
+        fp = Path(self.test_dir) / "file.txt"
+        fp.write_text("x")
+        time.sleep(1)
+        tree = self.monitor.build_file_tree()
+        self.assertIn("file.txt", tree)
+
+    def test_start_scans_existing_files(self):
+        """Files present before start should be indexed."""
+        early = Path(self.test_dir) / "early.txt"
+        early.write_text("hello")
+        self.monitor.start()
+        time.sleep(1)
+        tree = self.monitor.build_file_tree()
+        self.assertIn("early.txt", tree)
+
+    def test_event_queue_dispatch(self):
+        """Events should be queued and dispatched asynchronously."""
+        received: list[tuple[str, str]] = []
+
+        def cb(action, path):
+            if isinstance(path, tuple):
+                p = str(path[1])
+            else:
+                p = str(path)
+            received.append((action, p))
+
+        self.monitor.on_file_changed = cb
+        self.monitor.start()
+        fp = Path(self.test_dir) / "queue.txt"
+        fp.write_text("x")
+        for _ in range(30):
+            if received:
+                break
+            time.sleep(0.1)
+        self.monitor.stop()
+        self.assertTrue(received)
+        events = self.monitor.get_recent_events(5)
+        self.assertTrue(any(e.action == "created" for e in events))
+        self.assertTrue(any("queue.txt" in str(e.path) for e in events))
+
+    def test_watchlist_scanning(self):
+        """Paths added to the watchlist should be scanned for threats."""
+        alerts: list[str] = []
+
+        def on_threat(fp, risk):
+            alerts.append(risk.level)
+
+        self.monitor.on_threat_detected = on_threat
+        suspicious = Path(self.test_dir) / "mal.exe"
+        suspicious.write_bytes(b"MZ\x90\x00\x03")
+        self.monitor.add_watch_path(suspicious)
+        self.monitor.start()
+        self.monitor.scan_watchlist_now()
+        for _ in range(20):
+            if alerts:
+                break
+            time.sleep(0.1)
+        self.monitor.stop()
+        self.assertTrue(alerts)
+
+    def test_watchlist_persistence(self):
+        """add_watch_path and remove_watch_path should update the database."""
+        db = Database(Path(self.test_dir) / "db.sqlite")
+        mon = FolderMonitor(db=db)
+        target = Path(self.test_dir) / "p.txt"
+        mon.add_watch_path(target)
+        assert str(target) in db.get_watchlist()
+        mon.remove_watch_path(target)
+        assert str(target) not in db.get_watchlist()
+        mon.stop()
+        db.close()
+
+    def test_scan_now(self):
+        """scan_now should build the file tree without starting monitoring."""
+        fp = Path(self.test_dir) / "scan.txt"
+        fp.write_text("hello")
+        self.monitor.scan_now()
+        tree = self.monitor.build_file_tree()
+        self.assertIn("scan.txt", tree)
+
+    def test_database_logging(self):
+        """FolderMonitor should log events and threats when a database is provided."""
+        db = Database(Path(self.test_dir) / "db.sqlite")
+        mon = FolderMonitor(db=db)
+        mon.set_target_folder(self.test_dir)
+        mon.start()
+        fp = Path(self.test_dir) / "logme.exe"
+        fp.write_bytes(b"MZ\x90\x00\x03")
+        for _ in range(20):
+            if db.get_events(1) and db.get_threats(1):
+                break
+            time.sleep(0.1)
+        mon.stop()
+        assert db.get_events(1)
+        assert db.get_threats(1)
+        db.close()
+
+    def test_hash_persistence(self):
+        """Initial scan should store file hashes in the database."""
+        db = Database(Path(self.test_dir) / "db.sqlite")
+        mon = FolderMonitor(db=db)
+        mon.set_target_folder(self.test_dir)
+        (Path(self.test_dir) / "foo.txt").write_text("hi")
+        mon.scan_now()
+        mon.stop()
+        assert db.get_hash(str(Path(self.test_dir) / "foo.txt"))
+        db.close()
+
+    def test_scan_skips_unchanged(self):
+        """scan_now should reuse stored hashes when files are unchanged."""
+        db = Database(Path(self.test_dir) / "db.sqlite")
+        mon = FolderMonitor(db=db)
+        mon.set_target_folder(self.test_dir)
+        fp = Path(self.test_dir) / "cache.txt"
+        fp.write_text("hello")
+        mon.scan_now()
+        mon.stop()
+
+        mon2 = FolderMonitor(db=db)
+        mon2.set_target_folder(self.test_dir)
+        called = {}
+        from unittest import mock
+        with mock.patch.object(mon2, "_calculate_hash", side_effect=AssertionError("hash")) as h, \
+             mock.patch.object(mon2.analyzer, "analyze_file", side_effect=AssertionError("analyze")) as a:
+            mon2.scan_now()
+        mon2.stop()
+        db.close()
+
+    def test_context_manager(self):
+        """Using FolderMonitor in a context manager should stop it automatically."""
+        mon = FolderMonitor()
+        mon.set_target_folder(self.test_dir)
+        with mon:
+            mon.start()
+            self.assertTrue(mon.monitoring)
+        self.assertFalse(mon.monitoring)
+
+    def test_get_stats(self):
+        """get_stats should include uptime and watchlist size."""
+        self.monitor.add_watch_path(Path(self.test_dir) / "a.txt")
+        self.monitor.start()
+        time.sleep(0.2)
+        stats = self.monitor.get_stats()
+        self.monitor.stop()
+        self.assertIn("uptime", stats)
+        self.assertEqual(stats["watchlist"], 1)
+
+    def test_network_threat_logging(self):
+        """_handle_network_threat should log to the database."""
+        db = Database(Path(self.test_dir) / "db.sqlite")
+        mon = FolderMonitor(db=db)
+        mon.set_target_folder(self.test_dir)
+        class Conn:
+            pid = 1234
+            class Addr:
+                ip = "1.2.3.4"
+                port = 80
+            raddr = Addr()
+        mon._handle_network_threat(Conn())
+        mon.stop()
+        assert db.get_threats(1)
+        db.close()
+
+    def test_check_processes_now(self):
+        """check_processes_now should log suspicious processes."""
+        db = Database(Path(self.test_dir) / "db.sqlite")
+        mon = FolderMonitor(db=db)
+        mon.set_target_folder(self.test_dir)
+        class FakeProc:
+            pid = 4321
+            info = {"name": "evil.exe"}
+            def cpu_percent(self, interval=None):
+                return 90
+            def memory_info(self):
+                class M: rss = 300 * 1024 * 1024
+                return M()
+        from unittest import mock
+        with mock.patch.object(psutil, "process_iter", return_value=[FakeProc()]), \
+             mock.patch.object(mon.analyzer, "is_suspicious_process", return_value=True):
+            mon.check_processes_now()
+        mon.stop()
+        assert db.get_threats(1)
+        db.close()
+
+    def test_auto_adjust_watch_interval(self):
+        """auto_adjust_watch_interval should shrink and restore the interval."""
+        mon = FolderMonitor()
+        default = mon.watch_interval
+        mon.stats['threats_detected'] = 1
+        mon.auto_adjust_watch_interval()
+        self.assertLess(mon.watch_interval, default)
+        current = mon.watch_interval
+        mon.auto_adjust_watch_interval()
+        self.assertEqual(mon.watch_interval, current + 1)
 
 
 class TestPatternAnalyzer(unittest.TestCase):
