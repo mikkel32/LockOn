@@ -46,6 +46,22 @@ class Database:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS watchlist (
+                path TEXT PRIMARY KEY
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS hashes (
+                path TEXT PRIMARY KEY,
+                hash TEXT,
+                mtime REAL
+            )
+            """
+        )
         self.conn.commit()
 
     def log_event(self, path: str, action: str) -> None:
@@ -95,3 +111,126 @@ class Database:
             else:
                 cur.execute(query)
             return cur.fetchall()
+
+    # watchlist helpers -------------------------------------------------
+
+    def add_watch_path(self, path: str) -> None:
+        """Store *path* in the watchlist table."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute(
+                "INSERT OR IGNORE INTO watchlist(path) VALUES (?)",
+                (path,),
+            )
+            self.conn.commit()
+
+    def remove_watch_path(self, path: str) -> None:
+        """Remove *path* from the watchlist table."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("DELETE FROM watchlist WHERE path = ?", (path,))
+            self.conn.commit()
+
+    def get_watchlist(self) -> list[str]:
+        """Return all watchlisted paths."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("SELECT path FROM watchlist")
+            return [row[0] for row in cur.fetchall()]
+
+    # hash helpers ------------------------------------------------------
+
+    def update_hash(self, path: str, digest: str, mtime: float) -> None:
+        """Insert or update a file hash entry."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute(
+                "INSERT OR REPLACE INTO hashes(path, hash, mtime) VALUES (?, ?, ?)",
+                (path, digest, mtime),
+            )
+            self.conn.commit()
+
+    def get_hash(self, path: str) -> tuple[str, float] | None:
+        """Return stored hash and mtime for *path* if present."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("SELECT hash, mtime FROM hashes WHERE path = ?", (path,))
+            row = cur.fetchone()
+            if row:
+                return row[0], float(row[1])
+            return None
+
+    def delete_hash(self, path: str) -> None:
+        """Remove hash record for *path*."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("DELETE FROM hashes WHERE path = ?", (path,))
+            self.conn.commit()
+
+    def load_hashes(self) -> dict[str, tuple[str, float]]:
+        """Return all stored hashes as a mapping."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("SELECT path, hash, mtime FROM hashes")
+            return {row[0]: (row[1], float(row[2])) for row in cur.fetchall()}
+
+    # csv export helpers -------------------------------------------------
+
+    def export_events_csv(self, csv_path: Path, limit: int | None = None) -> None:
+        """Write recent events to *csv_path*."""
+        import csv
+
+        rows = self.get_events(limit)
+        with open(csv_path, "w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["path", "action", "timestamp"])
+            writer.writerows(rows)
+
+    def export_threats_csv(self, csv_path: Path, limit: int | None = None) -> None:
+        """Write recent threats to *csv_path*."""
+        import csv
+
+        rows = self.get_threats(limit)
+        with open(csv_path, "w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["path", "level", "type", "timestamp"])
+            writer.writerows(rows)
+
+    # statistics helpers -------------------------------------------------
+
+    def get_event_count(self) -> int:
+        """Return total number of events logged."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM events")
+            return int(cur.fetchone()[0])
+
+    def get_threat_count(self) -> int:
+        """Return total number of threats logged."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM threats")
+            return int(cur.fetchone()[0])
+
+    def get_watchlist_count(self) -> int:
+        """Return number of entries in the watchlist."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM watchlist")
+            return int(cur.fetchone()[0])
+
+    def get_hash_count(self) -> int:
+        """Return number of stored file hashes."""
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM hashes")
+            return int(cur.fetchone()[0])
+
+    def get_stats(self) -> dict[str, int]:
+        """Return statistics summary of the database."""
+        return {
+            "events": self.get_event_count(),
+            "threats": self.get_threat_count(),
+            "watchlist": self.get_watchlist_count(),
+            "hashes": self.get_hash_count(),
+        }
