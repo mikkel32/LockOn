@@ -84,6 +84,10 @@ python setup.py doctor
 The `--extras` flag installs additional features listed in
 `requirements-optional.txt`.
 
+Network monitoring relies on the `psutil` package. If it isn't
+available, Lock On uses a simplified built-in stub so the monitor can
+still run, albeit with reduced information.
+
 For full malware detection capabilities you also need the
 `yara-python` package which is included in `requirements.txt`.
 If you installed dependencies manually make sure to run:

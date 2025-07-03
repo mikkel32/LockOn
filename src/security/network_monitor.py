@@ -1,9 +1,31 @@
+from __future__ import annotations
+
 import threading
 import time
 import sys
-from typing import Iterable, Callable, List
+from typing import Callable, List, Iterable
 
 from utils.psutil_compat import psutil
+
+try:
+    from psutil._common import sconn as SConn  # type: ignore
+except Exception:  # pragma: no cover - fallback when psutil is missing
+    from dataclasses import dataclass
+
+    @dataclass
+    class Addr:
+        ip: str
+        port: int
+
+    @dataclass
+    class SConn:  # minimal replacement for psutil's sconn
+        raddr: Addr | None = None
+        laddr: Addr | None = None
+        pid: int | None = None
+        fd: int | None = None
+        family: int | None = None
+        type: int | None = None
+        status: str | None = None
 from .privileges import require_privileges
 
 try:  # optional
@@ -29,7 +51,7 @@ class NetworkMonitor:
         self._thread: threading.Thread | None = None
         self._running = False
         self._seen: dict[tuple[int, str, int], float] = {}
-        self.on_suspicious: Callable[[psutil._common.sconn], None] | None = None
+        self.on_suspicious: Callable[[SConn], None] | None = None
         if priv_manager is None:
             from security.privileges import PrivilegeManager
 
@@ -59,11 +81,12 @@ class NetworkMonitor:
             time.sleep(self.interval)
 
     # public method for one-off scan
-    def check_now(self) -> List[psutil._common.sconn]:
+
+    def check_now(self) -> List[SConn]:
         return self._check_once()
 
-    def _check_once(self) -> List[psutil._common.sconn]:
-        suspicious = []
+    def _check_once(self) -> List[SConn]:
+        suspicious: List[SConn] = []
         now = time.time()
         if sys.platform == "win32":
             self.priv_manager.ensure_active(["SeDebugPrivilege"], impersonate=False)
