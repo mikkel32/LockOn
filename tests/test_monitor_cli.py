@@ -45,6 +45,7 @@ def test_print_helpers(tmp_path, capsys):
     class _Risk:
         level = "high"
         type = "test"
+        details = {"snippets": [{"text": "snippet1", "line": 1}, {"text": "snippet2", "line": 2}]}
 
     cli._log_threat(tmp_path / "foo.txt", _Risk)
     cli.db.close()
@@ -56,6 +57,10 @@ def test_print_helpers(tmp_path, capsys):
     monitor_cli._print_threats(db_file, 1)
     out = capsys.readouterr().out
     assert "high" in out
+    assert "snippet1" in out
+    assert "snippet2" in out
+    assert "line 1" in out
+    assert "line 2" in out
 
 
 def test_custom_logger_path(tmp_path):
@@ -89,6 +94,13 @@ def test_lockoncli_debug_port(monkeypatch, tmp_path):
 
     cli.run()
     assert captured["addr"] == ("0.0.0.0", 6001)
+
+
+def test_cli_missing_folder(monkeypatch, tmp_path):
+    folder = tmp_path / "missing"
+    cli = LockOnCLI(None, folder=str(folder))
+    monkeypatch.setattr(time, "sleep", lambda x: (_ for _ in ()).throw(AssertionError("sleep called")))
+    cli.run()
 
 
 def test_watch_interval_override(tmp_path):

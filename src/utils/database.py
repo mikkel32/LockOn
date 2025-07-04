@@ -42,10 +42,15 @@ class Database:
                 path TEXT,
                 level TEXT,
                 type TEXT,
+                details TEXT,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
+        cur.execute("PRAGMA table_info(threats)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "details" not in cols:
+            cur.execute("ALTER TABLE threats ADD COLUMN details TEXT")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS watchlist (
@@ -73,13 +78,17 @@ class Database:
             )
             self.conn.commit()
 
-    def log_threat(self, path: str, level: str, threat_type: str) -> None:
+    def log_threat(
+        self, path: str, level: str, threat_type: str, details: dict | None = None
+    ) -> None:
         """Record a detected threat."""
+        import json
+
         with self._lock:
             cur = self.conn.cursor()
             cur.execute(
-                "INSERT INTO threats(path, level, type) VALUES (?, ?, ?)",
-                (path, level, threat_type),
+                "INSERT INTO threats(path, level, type, details) VALUES (?, ?, ?, ?)",
+                (path, level, threat_type, json.dumps(details or {})),
             )
             self.conn.commit()
 
@@ -100,17 +109,22 @@ class Database:
                 cur.execute(query)
             return cur.fetchall()
 
-    def get_threats(self, limit: int | None = None):
+    def get_threats(self, limit: int | None = None, with_details: bool = False):
         """Return recent threats."""
         with self._lock:
             cur = self.conn.cursor()
-            query = "SELECT path, level, type, timestamp FROM threats ORDER BY id DESC"
+            query = (
+                "SELECT path, level, type, details, timestamp FROM threats ORDER BY id DESC"
+            )
             if limit:
                 query += " LIMIT ?"
                 cur.execute(query, (limit,))
             else:
                 cur.execute(query)
-            return cur.fetchall()
+            rows = cur.fetchall()
+            if with_details:
+                return rows
+            return [(r[0], r[1], r[2], r[4]) for r in rows]
 
     # watchlist helpers -------------------------------------------------
 
@@ -190,10 +204,10 @@ class Database:
         """Write recent threats to *csv_path*."""
         import csv
 
-        rows = self.get_threats(limit)
+        rows = self.get_threats(limit, with_details=True)
         with open(csv_path, "w", newline="") as fh:
             writer = csv.writer(fh)
-            writer.writerow(["path", "level", "type", "timestamp"])
+            writer.writerow(["path", "level", "type", "details", "timestamp"])
             writer.writerows(rows)
 
     # statistics helpers -------------------------------------------------

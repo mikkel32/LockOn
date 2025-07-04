@@ -57,7 +57,7 @@ def test_export_csv(tmp_path):
     db.export_threats_csv(th_csv)
     db.close()
     assert ev_csv.read_text().strip().splitlines()[0] == "path,action,timestamp"
-    assert th_csv.read_text().strip().splitlines()[0] == "path,level,type,timestamp"
+    assert th_csv.read_text().strip().splitlines()[0] == "path,level,type,details,timestamp"
 
 
 def test_stats_methods(tmp_path):
