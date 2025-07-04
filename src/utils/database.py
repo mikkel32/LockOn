@@ -181,6 +181,18 @@ class Database:
             cur.execute("DELETE FROM hashes WHERE path = ?", (path,))
             self.conn.commit()
 
+    def get_hashes(self, limit: int | None = None) -> list[tuple[str, str, float]]:
+        """Return stored hashes with optional *limit* sorted by most recent."""
+        with self._lock:
+            cur = self.conn.cursor()
+            query = "SELECT path, hash, mtime FROM hashes ORDER BY mtime DESC"
+            if limit:
+                query += " LIMIT ?"
+                cur.execute(query, (limit,))
+            else:
+                cur.execute(query)
+            return [(r[0], r[1], float(r[2])) for r in cur.fetchall()]
+
     def load_hashes(self) -> dict[str, tuple[str, float]]:
         """Return all stored hashes as a mapping."""
         with self._lock:
