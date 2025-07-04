@@ -338,6 +338,7 @@ the best available backend (Vagrant preferred, then Docker, otherwise local):
 
 ```bash
 python scripts/manage_vm.py start --open-vscode
+python setup.py vm start --open-vscode
 ```
 
 `manage_vm.py` dynamically selects a **Vagrant**, **Docker**, or **local**
@@ -358,6 +359,7 @@ python scripts/manage_vm.py halt
 python scripts/manage_vm.py ssh
 python scripts/manage_vm.py logs
 python scripts/manage_vm.py doctor
+python setup.py vm doctor
 ```
 
 The `doctor` command checks that the chosen backend has `debugpy` installed and

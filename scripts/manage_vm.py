@@ -9,6 +9,8 @@ import os
 import signal
 from shutil import which
 from pathlib import Path
+import socket
+import time
 
 def _launch_vscode(workspace: Path, port: int) -> None:
     """Open VS Code pointing at *workspace* if available."""
@@ -32,6 +34,37 @@ def _run(cmd: list[str], env=None) -> None:
 def _spawn(cmd: list[str], env=None) -> subprocess.Popen:
     """Spawn a background process and return the handle."""
     return subprocess.Popen(cmd, env=env)
+
+
+def _port_available(port: int) -> bool:
+    """Return True if *port* can be bound on localhost."""
+    with socket.socket() as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+        return True
+
+
+def _wait_for_port(
+    port: int,
+    host: str = "127.0.0.1",
+    timeout: float = 5.0,
+    interval: float = 0.1,
+) -> bool:
+    """Return True if *host:port* becomes connectable within *timeout* seconds."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        with socket.socket() as sock:
+            try:
+                sock.settimeout(interval)
+                sock.connect((host, port))
+            except OSError:
+                time.sleep(interval)
+            else:
+                return True
+    return False
 
 
 class Backend:
@@ -64,19 +97,41 @@ class Backend:
 class VagrantBackend(Backend):
     """Control the Vagrant VM used for debugging."""
 
+    def _ensure_debugpy(self, env) -> None:
+        """Install ``debugpy`` in the VM if it's missing."""
+        try:
+            self._run(["vagrant", "ssh", "-c", "python3 -c 'import debugpy'"], env=env)
+        except subprocess.CalledProcessError:
+            print("Installing debugpy in VM...", file=sys.stderr)
+            self._run(["vagrant", "ssh", "-c", "pip3 install --user debugpy"], env=env)
+
     def start(self, provision: bool = False, port: int = 5678) -> None:
         env = {"LOCKON_DEBUG_PORT": str(port), **os.environ}
+        if not _port_available(port):
+            print(f"Port {port} already in use; cannot start debug environment", file=sys.stderr)
+            return
         self._run(["vagrant", "up"], env=env)
         if provision:
             self._run(["vagrant", "provision"], env=env)
-        self._run([
-            "vagrant",
-            "ssh",
-            "-c",
-            "sudo systemctl restart lockon-debug.service",
-        ], env=env)
-        print(f"VM is running and lockon-debug service is active on port {port}.")
-        print("Open VS Code and use the 'Attach to VM' configuration to begin debugging.")
+        self._ensure_debugpy(env)
+        self._run(
+            [
+                "vagrant",
+                "ssh",
+                "-c",
+                "sudo systemctl restart lockon-debug.service",
+            ],
+            env=env,
+        )
+        if _wait_for_port(port):
+            print(
+                f"VM is running and lockon-debug service is active on port {port}."
+            )
+            print(
+                "Open VS Code and use the 'Attach to VM' configuration to begin debugging."
+            )
+        else:
+            print("Debug server failed to start", file=sys.stderr)
 
     def halt(self) -> None:
         self._run(["vagrant", "halt"])
@@ -97,8 +152,14 @@ class VagrantBackend(Backend):
         ])
 
     def doctor(self) -> None:
-        self._run(["vagrant", "ssh", "-c", "python3 -c 'import debugpy'" ])
-        self._run(["vagrant", "ssh", "-c", "systemctl status lockon-debug.service" ])
+        env = {"LOCKON_DEBUG_PORT": os.environ.get("LOCKON_DEBUG_PORT", "5678"), **os.environ}
+        self._ensure_debugpy(env)
+        self._run(["vagrant", "ssh", "-c", "systemctl status lockon-debug.service"], env=env)
+        port = int(env["LOCKON_DEBUG_PORT"])
+        if _wait_for_port(port):
+            print(f"Debug server reachable on port {port}")
+        else:
+            print(f"Debug server not responding on port {port}", file=sys.stderr)
 
 
 class DockerBackend(Backend):
@@ -114,11 +175,26 @@ class DockerBackend(Backend):
     def _dc(self, args: list[str], env=None) -> None:
         self._run([*self.compose_cmd, *args], env=env)
 
+    def _ensure_debugpy(self, env) -> None:
+        """Install ``debugpy`` in the container if needed."""
+        try:
+            self._dc(["exec", "lockon", "python", "-c", "import debugpy"], env=env)
+        except subprocess.CalledProcessError:
+            print("Installing debugpy in container...", file=sys.stderr)
+            self._dc(["exec", "lockon", "pip", "install", "--user", "debugpy"], env=env)
+
     def start(self, provision: bool = False, port: int = 5678) -> None:  # pragma: no cover - simple
         env = {"LOCKON_DEBUG_PORT": str(port), **os.environ}
+        if not _port_available(port):
+            print(f"Port {port} already in use; cannot start debug environment", file=sys.stderr)
+            return
         self._dc(["up", "--build", "-d"], env=env)
-        print(f"Docker container running and debug server exposed on port {port}.")
-        print("Attach VS Code using the 'Attach to VM' configuration.")
+        self._ensure_debugpy(env)
+        if _wait_for_port(port):
+            print(f"Docker container running and debug server exposed on port {port}.")
+            print("Attach VS Code using the 'Attach to VM' configuration.")
+        else:
+            print("Debug server failed to start", file=sys.stderr)
 
     def halt(self) -> None:
         self._dc(["down"])
@@ -128,9 +204,15 @@ class DockerBackend(Backend):
         self._dc(["ps"])
 
     def doctor(self) -> None:
-        """Verify debugpy is available and the server is running."""
-        self._dc(["exec", "lockon", "python", "-c", "import debugpy"])
-        self._dc(["exec", "lockon", "pgrep", "-f", "debug_server.py"])
+        """Verify ``debugpy`` is installed and the server is reachable."""
+        env = {"LOCKON_DEBUG_PORT": os.environ.get("LOCKON_DEBUG_PORT", "5678"), **os.environ}
+        self._ensure_debugpy(env)
+        self._dc(["exec", "lockon", "pgrep", "-f", "debug_server.py"], env=env)
+        port = int(env["LOCKON_DEBUG_PORT"])
+        if _wait_for_port(port):
+            print(f"Debug server reachable on port {port}")
+        else:
+            print(f"Debug server not responding on port {port}", file=sys.stderr)
 
 
 class LocalBackend(Backend):
@@ -197,10 +279,19 @@ class LocalBackend(Backend):
             return
         if not self._ensure_debugpy(auto_install=True):
             return
+        if not _port_available(port):
+            print(f"Port {port} already in use; cannot start debug server", file=sys.stderr)
+            return
         proc = self._spawn([sys.executable, "debug_server.py", "--port", str(port)], env=env)
         self.pid_file.parent.mkdir(parents=True, exist_ok=True)
         self.pid_file.write_text(f"{proc.pid}\n")
-        print(f"Local debug server started on port {port} (PID {proc.pid}).")
+        if _wait_for_port(port):
+            print(f"Local debug server started on port {port} (PID {proc.pid}).")
+        else:
+            print(
+                f"Debug server failed to start on port {port}",
+                file=sys.stderr,
+            )
 
     def halt(self) -> None:
         pid = self._running_pid()
@@ -240,8 +331,12 @@ class LocalBackend(Backend):
         if self._ensure_debugpy(auto_install=True):
             print("debugpy installed locally.")
         pid = self._running_pid()
+        port = int(os.environ.get("LOCKON_DEBUG_PORT", 5678))
         if pid:
-            print(f"Debug server running (PID {pid})")
+            if _wait_for_port(port):
+                print(f"Debug server running (PID {pid}) and reachable on port {port}")
+            else:
+                print(f"Debug server running (PID {pid}) but port {port} is closed", file=sys.stderr)
         else:
             print("Debug server not running")
 
