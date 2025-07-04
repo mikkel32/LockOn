@@ -27,7 +27,8 @@ except Exception:  # pragma: no cover - lightweight fallback
             if ctk_key in kwargs:
                 value = kwargs.pop(ctk_key)
                 if isinstance(value, str) and value.lower() == "transparent":
-                    value = ""
+                    # Do not set the color at all to allow Tk defaults
+                    continue
                 kwargs[tk_key] = value
 
         # discard unsupported options
