@@ -187,3 +187,14 @@ def test_stats_command(tmp_path, capsys):
     assert "Threats: 1" in out
     assert "Watchlist: 1" in out
 
+
+def test_hashes_command(tmp_path, capsys):
+    db = Database(tmp_path / "db.sqlite")
+    db.update_hash("foo.txt", "abcd", 123.0)
+    db.close()
+
+    monitor_cli.main(["--db", str(tmp_path / "db.sqlite"), "hashes", "-n", "1"])
+    out = capsys.readouterr().out
+    assert "abcd" in out
+    assert "foo.txt" in out
+

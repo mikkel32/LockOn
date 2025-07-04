@@ -158,6 +158,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     threats_p = sub.add_parser("threats", help="Show detected threats")
     threats_p.add_argument("-n", "--limit", type=int, default=10)
 
+    hashes_p = sub.add_parser("hashes", help="Show stored file hashes")
+    hashes_p.add_argument("-n", "--limit", type=int, default=10)
+
     export_p = sub.add_parser("export", help="Export logs to CSV")
     export_p.add_argument("table", choices=["events", "threats"])
     export_p.add_argument("csv_file", type=Path)
@@ -190,6 +193,14 @@ def _print_threats(db: Path, limit: int) -> None:
             summary = ThreatSummary.from_db_row(path, level, ttype, details)
             msg = summary.format(color=True)
             print(f"{ts} {msg}")
+
+
+def _print_hashes(db: Path, limit: int) -> None:
+    """Print stored file hashes from the database."""
+    with Database(db) as database:
+        for path, digest, mtime in database.get_hashes(limit):
+            ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
+            print(f"{ts} {digest} {path}")
 
 
 def _print_tree(folder: str, config: Path | None, db: Path | None) -> None:
@@ -258,6 +269,8 @@ def main(argv: list[str] | None = None) -> None:
             _print_tree(args.folder, args.config, args.db)
         elif args.command == "stats":
             _print_stats(db_path)
+        elif args.command == "hashes":
+            _print_hashes(db_path, args.limit)
 
 
 if __name__ == "__main__":

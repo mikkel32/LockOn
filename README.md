@@ -15,6 +15,7 @@ Lock On is an advanced folder security monitoring system that uses intelligent p
 - **Adaptive Watchlist Scanning**: Watchlist interval shortens when new threats appear
 - **CLI File Tree**: Generate an ASCII tree of monitored files from the command line
 - **CLI Statistics**: Summarize logged events and threats at a glance
+- **CLI Hash Listing**: View stored file hashes with timestamps
 - **Process & Network Logging**: Suspicious processes and network connections are stored in the database
 
 ### 🧠 Intelligence Engine
@@ -114,6 +115,13 @@ python main.py
 
 # CLI Mode (automatic on headless systems)
 python main.py
+# Force CLI with custom options
+python main.py --cli --folder /srv/shared --db data/lockon.db --watch-interval 30
+
+# Utility flags
+python main.py --version       # show application version
+python main.py --show-config   # print the path to the config file
+python main.py --init-config   # generate a default configuration
 ```
 
 ## 📸 Screenshots
@@ -350,7 +358,8 @@ python setup.py vm start --open-vscode
 
 `manage_vm.py` dynamically selects a **Vagrant**, **Docker**, or **local**
 backend using an internal `EnvironmentManager` so the same commands work in any
-environment.
+environment. Set `LOCKON_BACKEND` to `vagrant`, `docker`, or `local` to
+override the automatic choice.
 After starting, run:
 
 ```bash
@@ -467,6 +476,12 @@ Show database statistics like logged events and threats:
 python -m core.monitor_cli stats --db data/database.db
 ```
 This prints the total events, threats, watchlist entries and stored file hashes.
+
+To list stored file hashes with timestamps:
+
+```bash
+python -m core.monitor_cli hashes -n 5
+```
 
 ### Running inside Vagrant
 

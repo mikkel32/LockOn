@@ -351,11 +351,20 @@ class EnvironmentManager:
         self.backend = self._detect_backend()
 
     def _detect_backend(self) -> Backend:
+        forced = os.environ.get("LOCKON_BACKEND")
+        if forced:
+            forced = forced.lower()
+            if forced == "vagrant" and self._which("vagrant"):
+                return VagrantBackend(self._run, self._spawn)
+            if forced == "docker" and self._which("docker"):
+                return DockerBackend(self._run, self._spawn, self._which)
+            if forced == "local":
+                return LocalBackend(self._run, self._spawn)
         if self._which("vagrant"):
             return VagrantBackend(self._run, self._spawn)
         if self._which("docker"):
             if self._which("docker-compose"):
-                return DockerBackend(self._run, self._spawn)
+                return DockerBackend(self._run, self._spawn, self._which)
             try:
                 subprocess.run(
                     ["docker", "compose", "version"],
@@ -363,7 +372,7 @@ class EnvironmentManager:
                     stderr=subprocess.DEVNULL,
                     check=True,
                 )
-                return DockerBackend(self._run, self._spawn)
+                return DockerBackend(self._run, self._spawn, self._which)
             except Exception:
                 pass
         # Fall back to running locally so tests and development can continue
