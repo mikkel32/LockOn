@@ -16,6 +16,12 @@ except Exception:  # pragma: no cover - yara not available
 class Scanner:
     """High-level scanner that hashes and checks files with YARA."""
 
+    EMPTY_RESULT = {"hash": "", "yara": [], "yara_meta": []}
+
+    def clear_cache(self) -> None:
+        """Reset the internal scan cache."""
+        self._cache.clear()
+
     def __init__(self, yara_scanner: "YaraScanner | None" = None) -> None:
         self.yara = yara_scanner
         if self.yara is None and YaraScanner is not None:
@@ -29,19 +35,28 @@ class Scanner:
         try:
             mtime = fp.stat().st_mtime
         except Exception:
-            return {"hash": "", "yara": []}
+            return Scanner.EMPTY_RESULT
 
         cached = self._cache.get(path)
         if cached and cached[1] == mtime:
             digest, _, matches, meta = cached
         else:
-            digest = file_hash(path)
+            try:
+                digest = file_hash(path)
+            except FileNotFoundError:
+                logger.error(f"Scan failed; file disappeared: {path}")
+                return Scanner.EMPTY_RESULT
+
             matches: List[str] = []
             meta: List[tuple[str, dict]] = []
             if self.yara:
-                self.yara.reload_if_updated()
-                matches = self.yara.scan_file(fp)
-                meta = self.yara.scan_file_meta(fp)
+                try:
+                    self.yara.reload_if_updated()
+                    matches = self.yara.scan_file(fp)
+                    meta = self.yara.scan_file_meta(fp)
+                except FileNotFoundError:
+                    logger.error(f"YARA scan failed; file disappeared: {path}")
+                    return Scanner.EMPTY_RESULT
             self._cache[path] = (digest, mtime, matches, meta)
         logger.debug(f"Scanned {path} hash={digest} matches={matches}")
         return {"hash": digest, "yara": matches, "yara_meta": meta}

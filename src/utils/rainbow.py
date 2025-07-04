@@ -8,9 +8,6 @@ from contextlib import ContextDecorator
 from rich.console import Console
 from rich.live import Live
 from rich.text import Text
-from rich.panel import Panel
-from rich.layout import Layout
-from rich.align import Align
 
 console = Console()
 

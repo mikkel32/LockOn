@@ -332,13 +332,17 @@ def glitch_intro():
         for line in logo_lines:
             if intensity > 0:
                 console.print(
-                    Align.center(GlitchText.glitch(line, intensity)),
-                    vertical="middle"
+                    Align.center(
+                        GlitchText.glitch(line, intensity),
+                        vertical="middle",
+                    )
                 )
             else:
                 console.print(
-                    Align.center(_cyberpunk_gradient(line)),
-                    vertical="middle"
+                    Align.center(
+                        _cyberpunk_gradient(line),
+                        vertical="middle",
+                    )
                 )
         
         time.sleep(0.2)
@@ -361,8 +365,10 @@ def particle_intro():
             console.print("\n" * 8)  # Position logo
             for line in logo_lines:
                 console.print(
-                    Align.center(_cyberpunk_gradient(line, step)),
-                    vertical="middle"
+                    Align.center(
+                        _cyberpunk_gradient(line, step),
+                        vertical="middle",
+                    )
                 )
         
         time.sleep(0.05)

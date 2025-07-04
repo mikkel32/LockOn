@@ -6,8 +6,7 @@ from typing import Optional
 
 from utils.logger import SecurityLogger
 from security.quarantine import QuarantineManager
-from security.privileges import has_privilege, PrivilegeManager, require_privileges
-import sys
+from security.privileges import PrivilegeManager, require_privileges
 
 
 class ActionEnforcer:
