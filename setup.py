@@ -32,14 +32,15 @@ from rich.progress import (
 )
 from rich.panel import Panel
 from rich.align import Align
-from rich.layout import Layout
-from rich.console import Group
 
 from src.utils.helpers import log, get_system_info, run_with_spinner, console
 from src.utils.config import ensure_config
 from src.utils.rainbow import (
-    NeonPulseBorder, MatrixRain, GlitchText, 
-    ParticleField, AsciiFireworks
+    NeonPulseBorder,
+    MatrixRain,
+    GlitchText,
+    ParticleField,
+    AsciiFireworks,
 )
 
 MIN_PYTHON = (3, 10)
@@ -52,15 +53,15 @@ LOCKON_ART_3D = r"""
 """
 
 LOCKON_ART_BLOCKS = r"""
-▄█       ▄██████▄   ▄████████    ▄█   ▄█▄  ▄██████▄  ███▄▄▄▄   
-███      ███    ███ ███    ███   ███ ▄███▀ ███    ███ ███▀▀▀██▄ 
-███      ███    ███ ███    █▀    ███▐██▀   ███    ███ ███   ███ 
-███      ███    ███ ███         ▄█████▀    ███    ███ ███   ███ 
-███      ███    ███ ███        ▀▀█████▄    ███    ███ ███   ███ 
-███      ███    ███ ███    █▄    ███▐██▄   ███    ███ ███   ███ 
-███▌    ▄███    ███ ███    ███   ███ ▀███▄ ███    ███ ███   ███ 
-█████▄▄██ ▀██████▀  ████████▀    ███   ▀█▀  ▀██████▀   ▀█   █▀  
-▀                                 ▀                              
+▄█       ▄██████▄   ▄████████    ▄█   ▄█▄  ▄██████▄  ███▄▄▄▄
+███      ███    ███ ███    ███   ███ ▄███▀ ███    ███ ███▀▀▀██▄
+███      ███    ███ ███    █▀    ███▐██▀   ███    ███ ███   ███
+███      ███    ███ ███         ▄█████▀    ███    ███ ███   ███
+███      ███    ███ ███        ▀▀█████▄    ███    ███ ███   ███
+███      ███    ███ ███    █▄    ███▐██▄   ███    ███ ███   ███
+███▌    ▄███    ███ ███    ███   ███ ▀███▄ ███    ███ ███   ███
+█████▄▄██ ▀██████▀  ████████▀    ███   ▀█▀  ▀██████▀   ▀█   █▀
+▀                                 ▀
 """
 
 LOCKON_ART_CYBER = r"""
@@ -108,24 +109,29 @@ def _cyberpunk_gradient(text: str, offset: int = 0) -> Text:
     """Create a cyberpunk-style gradient with neon colors."""
     result = Text()
     colors = [
-        "#ff006e", "#fb5607", "#ffbe0b", "#8338ec", "#3a86ff",
-        "#06ffa5", "#ff006e"  # Loop back
+        "#ff006e",
+        "#fb5607",
+        "#ffbe0b",
+        "#8338ec",
+        "#3a86ff",
+        "#06ffa5",
+        "#ff006e",  # Loop back
     ]
-    
+
     for i, char in enumerate(text):
-        if char == ' ':
+        if char == " ":
             result.append(char)
         else:
             pos = ((i + offset) % len(text)) / max(len(text) - 1, 1)
             color_idx = int(pos * (len(colors) - 1))
             color = colors[color_idx]
-            
+
             # Add glow effect randomly
             if random.random() > 0.8:
                 result.append(char, style=f"bold {color} on {color}33")
             else:
                 result.append(char, style=f"bold {color}")
-    
+
     return result
 
 
@@ -133,21 +139,21 @@ def _gradient_line(line: str, offset: int = 0) -> Text:
     """Enhanced gradient with multiple color schemes."""
     text = Text()
     n = max(len(line) - 1, 1)
-    
+
     # Choose random gradient style
-    gradient_style = random.choice(['neon', 'fire', 'ocean', 'rainbow'])
-    
+    gradient_style = random.choice(["neon", "fire", "ocean", "rainbow"])
+
     for i, ch in enumerate(line):
         pos = ((i + offset) % len(line)) / n
-        
-        if gradient_style == 'neon':
+
+        if gradient_style == "neon":
             color = _blend("#00eaff", "#ff00d0", pos)
-        elif gradient_style == 'fire':
+        elif gradient_style == "fire":
             if pos < 0.5:
                 color = _blend("#ff0000", "#ff8800", pos * 2)
             else:
                 color = _blend("#ff8800", "#ffff00", (pos - 0.5) * 2)
-        elif gradient_style == 'ocean':
+        elif gradient_style == "ocean":
             color = _blend("#001f3f", "#00bfff", pos)
         else:  # rainbow
             hue = pos * 360
@@ -155,9 +161,9 @@ def _gradient_line(line: str, offset: int = 0) -> Text:
             g = int((math.sin(math.radians(hue + 120)) + 1) * 127.5)
             b = int((math.sin(math.radians(hue + 240)) + 1) * 127.5)
             color = f"#{r:02x}{g:02x}{b:02x}"
-        
+
         text.append(ch, style=color)
-    
+
     return text
 
 
@@ -179,28 +185,28 @@ def _blend(c1: str, c2: str, t: float) -> str:
 def animated_logo_assembly():
     """Assemble the logo piece by piece with effects."""
     console.clear()
-    grid = [[' ' for _ in range(35)] for _ in range(3)]
-    
+    grid = [[" " for _ in range(35)] for _ in range(3)]
+
     for part, x, y in LOGO_PARTS:
         # Add each part with a flash effect
         for i, char in enumerate(part):
             if 0 <= y < 3 and 0 <= x + i < 35:
                 grid[y][x + i] = char
-        
+
         # Render current state with effects
         console.clear()
         for row_idx, row in enumerate(grid):
-            line = ''.join(row)
+            line = "".join(row)
             console.print(_cyberpunk_gradient(line, row_idx * 5), justify="center")
-        
+
         time.sleep(0.05)
-    
+
     # Final flash effect
     for _ in range(3):
         console.clear()
         time.sleep(0.1)
         for row in grid:
-            line = ''.join(row)
+            line = "".join(row)
             console.print(Text(line, style="bold white on cyan"), justify="center")
         time.sleep(0.1)
 
@@ -208,69 +214,67 @@ def animated_logo_assembly():
 def matrix_intro():
     """Show a Matrix-style rain intro."""
     matrix = MatrixRain(width=80, height=20)
-    
+
     for step in range(50):
         console.clear()
         console.print(matrix.render(step))
-        
+
         # Gradually reveal the logo
         if step > 25:
             opacity = (step - 25) / 25
-            logo_lines = LOCKON_ART_CYBER.strip().split('\n')
+            logo_lines = LOCKON_ART_CYBER.strip().split("\n")
             y_offset = 8
-            
+
             for i, line in enumerate(logo_lines):
                 if random.random() < opacity:
                     console.print(
-                        _cyberpunk_gradient(line, step),
-                        justify="center",
-                        style=f"bold"
+                        _cyberpunk_gradient(line, step), justify="center", style=f"bold"
                     )
-        
+
         time.sleep(0.05)
 
 
 def fireworks_celebration():
     """Display a fireworks show."""
     fw = AsciiFireworks(width=console.width, height=25)
-    
+
     for step in range(100):
         fw.launch()
         fw.update()
-        
+
         console.clear()
         console.print(fw.render())
-        
+
         # Show success message in the middle
         if step > 30:
             console.print("\n" * 10)
             console.print(
                 Align.center(
                     Text("✨ INSTALLATION COMPLETE! ✨", style="bold green"),
-                    vertical="middle"
+                    vertical="middle",
                 )
             )
-        
+
         time.sleep(0.05)
 
 
 def show_setup_banner() -> None:
     """Enhanced setup banner with multiple effects."""
-    
+
     # Choose random intro effect
     intro_effects = [
         ("matrix", matrix_intro),
         ("assembly", animated_logo_assembly),
         ("classic", lambda: classic_gradient_intro()),
         ("glitch", lambda: glitch_intro()),
-        ("particle", lambda: particle_intro())
+        ("particle", lambda: particle_intro()),
     ]
-    
+
     effect_name, effect_func = random.choice(intro_effects)
-    
+
     # Run the chosen effect
     effect_func()
-    
+
     # Show loading progress with custom animation
     with Progress(
         SpinnerColumn(style="bold magenta"),
@@ -282,20 +286,22 @@ def show_setup_banner() -> None:
         transient=True,
     ) as progress:
         task = progress.add_task("🚀 Initializing LockOn", total=100)
-        
+
         for i in range(100):
             progress.update(task, advance=1)
-            
+
             # Update description with fun messages
             if i == 25:
-                progress.update(task, description="🔧 Configuring quantum flux capacitor")
+                progress.update(
+                    task, description="🔧 Configuring quantum flux capacitor"
+                )
             elif i == 50:
                 progress.update(task, description="⚡ Charging neon circuits")
             elif i == 75:
                 progress.update(task, description="🌟 Activating hyperdrive")
-            
+
             time.sleep(0.02)
-    
+
     # Final banner
     console.rule("[bold cyan]═══ LockOn Setup Complete ═══")
     console.print()
@@ -304,31 +310,33 @@ def show_setup_banner() -> None:
 def classic_gradient_intro():
     """Classic gradient animation with enhancements."""
     lines = LOCKON_ART_MINIMAL.strip("\n").splitlines()
-    
+
     with NeonPulseBorder(speed=0.05, effect="rainbow"):
         for step in range(30):
             console.clear()
-            
+
             # Add particle effects behind text
-            particles = ParticleField(width=console.width, height=len(lines) + 4, particles=30)
+            particles = ParticleField(
+                width=console.width, height=len(lines) + 4, particles=30
+            )
             particles.update()
             console.print(particles.render())
-            
+
             console.print()  # Spacing
-            
+
             for line in lines:
                 console.print(_gradient_line(line, step), justify="center")
-            
+
             time.sleep(0.05)
 
 
 def glitch_intro():
     """Glitch effect intro."""
-    logo_lines = LOCKON_ART_BLOCKS.strip().split('\n')
-    
+    logo_lines = LOCKON_ART_BLOCKS.strip().split("\n")
+
     for intensity in [0.8, 0.6, 0.4, 0.2, 0.1, 0.05, 0]:
         console.clear()
-        
+
         for line in logo_lines:
             if intensity > 0:
                 console.print(
@@ -344,22 +352,24 @@ def glitch_intro():
                         vertical="middle",
                     )
                 )
-        
+
         time.sleep(0.2)
 
 
 def particle_intro():
     """Particle field intro."""
-    particles = ParticleField(width=console.width, height=console.height - 5, particles=100)
-    logo_lines = LOCKON_ART_3D.strip().split('\n')
-    
+    particles = ParticleField(
+        width=console.width, height=console.height - 5, particles=100
+    )
+    logo_lines = LOCKON_ART_3D.strip().split("\n")
+
     for step in range(40):
         console.clear()
-        
+
         # Update and render particles
         particles.update()
         console.print(particles.render())
-        
+
         # Overlay logo with increasing opacity
         if step > 10:
             console.print("\n" * 8)  # Position logo
@@ -370,7 +380,7 @@ def particle_intro():
                         vertical="middle",
                     )
                 )
-        
+
         time.sleep(0.05)
 
 
@@ -442,11 +452,15 @@ def get_root() -> Path:
     if env:
         return Path(env).expanduser().resolve()
     try:
-        out = subprocess.check_output([
-            "git",
-            "rev-parse",
-            "--show-toplevel",
-        ], cwd=Path(__file__).resolve().parent, text=True).strip()
+        out = subprocess.check_output(
+            [
+                "git",
+                "rev-parse",
+                "--show-toplevel",
+            ],
+            cwd=Path(__file__).resolve().parent,
+            text=True,
+        ).strip()
         return Path(out)
     except Exception:
         return locate_root()
@@ -476,7 +490,9 @@ def ensure_venv(venv_dir: Path = VENV_DIR, *, python: str | None = None) -> Path
         py_exe = python or sys.executable
         log(f"🏗️  Creating virtual environment at {venv_dir} using {py_exe}")
         with NeonPulseBorder(effect="rainbow"):
-            run_with_spinner([py_exe, "-m", "venv", str(venv_dir)], message="🌈 Creating virtualenv")
+            run_with_spinner(
+                [py_exe, "-m", "venv", str(venv_dir)], message="🌈 Creating virtualenv"
+            )
 
     python_path = venv_dir / "bin" / "python"
     if not python_path.exists():
@@ -484,24 +500,116 @@ def ensure_venv(venv_dir: Path = VENV_DIR, *, python: str | None = None) -> Path
     return python_path
 
 
-def _pip(args: Iterable[str], python: Path | None = None, *, upgrade_pip: bool = False) -> None:
+def _pip(
+    args: Iterable[str], python: Path | None = None, *, upgrade_pip: bool = False
+) -> None:
     py = python or ensure_venv()
     if upgrade_pip:
         with NeonPulseBorder(effect="wave"):
-            run_with_spinner([str(py), "-m", "pip", "install", "--upgrade", "pip"], message="⬆️  Upgrading pip")
+            run_with_spinner(
+                [str(py), "-m", "pip", "install", "--upgrade", "pip"],
+                message="⬆️  Upgrading pip",
+            )
     cmd = [str(py), "-m", "pip", *args]
     log("🔧 Running: " + " ".join(cmd))
     with NeonPulseBorder(effect="pulse"):
         run_with_spinner(cmd, message="📦 Installing dependencies")
 
 
-def run_tests(extra: Iterable[str] | None = None) -> None:
-    python = ensure_venv()
-    cmd = [str(python), "-m", "pytest", "-q"]
+def run_tests(
+    extra: Iterable[str] | None = None,
+    *,
+    python: Path | None = None,
+    coverage: bool = False,
+    parallel: bool = False,
+) -> tuple[str, int]:
+    """Run the test suite and return its output and exit code.
+
+    Parameters
+    ----------
+    extra : Iterable[str] | None, optional
+        Additional arguments to pass to ``pytest``.
+    python : Path | None, optional
+        Python executable to use for running tests.  If not provided, the
+        project virtual environment will be ensured and used.
+    coverage : bool, optional
+        Install ``pytest-cov`` if needed and enable coverage reporting.
+    parallel : bool, optional
+        Install ``pytest-xdist`` if needed and run tests across all CPUs.
+    """
+
+    py = Path(python) if python else ensure_venv()
+
+    result = subprocess.run(
+        [str(py), "-m", "pytest", "--version"], capture_output=True
+    )
+    if result.returncode != 0:
+        _pip(["install", "pytest"], python=py)
+
+    cmd = [str(py), "-m", "pytest", "-q"]
+    if coverage:
+        result = subprocess.run(
+            [str(py), "-m", "pip", "show", "pytest-cov"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            _pip(["install", "pytest-cov"], python=py)
+        cmd.extend(["--cov=src", "--cov-report=term-missing:skip-covered"])
+    if parallel:
+        result = subprocess.run(
+            [str(py), "-m", "pip", "show", "pytest-xdist"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            _pip(["install", "pytest-xdist"], python=py)
+        cmd.extend(["-n", "auto"])
     if extra:
         cmd.extend(extra)
+
     log("🧪 Running: " + " ".join(cmd))
-    subprocess.check_call(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return result.stdout + result.stderr, result.returncode
+
+
+def show_test_results(
+    extra: Iterable[str] | None = None,
+    *,
+    python: Path | None = None,
+    coverage: bool = False,
+    parallel: bool = False,
+) -> None:
+    """Execute the test suite and display the results inside a fancy panel.
+
+    Parameters
+    ----------
+    extra : Iterable[str] | None, optional
+        Additional arguments forwarded to ``pytest``.
+    python : Path | None, optional
+        Python executable to use, defaults to the project virtual environment.
+    coverage : bool, optional
+        Enable coverage reporting using ``pytest-cov``.
+    parallel : bool, optional
+        Run tests in parallel using ``pytest-xdist``.
+    """
+    output, code = run_tests(
+        extra,
+        python=python,
+        coverage=coverage,
+        parallel=parallel,
+    )
+
+    style = "green" if code == 0 else "red"
+    panel = Panel(
+        Align.left(Text(output.strip(), style=style)),
+        title="[bold magenta]Test Results",
+        border_style="bright_blue",
+        padding=(1, 2),
+    )
+    console.print(panel)
+    if code != 0:
+        sys.exit(code)
 
 
 def freeze_requirements(output: Path = ROOT_DIR / "requirements.lock") -> None:
@@ -571,11 +679,14 @@ def install(
             _pip(args, python=py)
 
     ensure_config()
-    
+
     # Show completion animation
     fireworks_celebration()
-    
+
     log("✅ Dependencies installed successfully!")
+
+    # Run the test suite with coverage in parallel and show results
+    show_test_results(coverage=True, parallel=True)
 
 
 def check_outdated(requirements: Path | None = None, *, upgrade: bool = False) -> None:
@@ -591,7 +702,10 @@ def check_outdated(requirements: Path | None = None, *, upgrade: bool = False) -
         check=False,
     )
     try:
-        pkgs = [f"{p['name']} {p['version']} -> {p['latest_version']}" for p in __import__('json').loads(result.stdout)]
+        pkgs = [
+            f"{p['name']} {p['version']} -> {p['latest_version']}"
+            for p in __import__("json").loads(result.stdout)
+        ]
     except Exception:
         pkgs = []
     if pkgs:
@@ -611,14 +725,14 @@ def show_info() -> None:
 🐍 Virtualenv: {VENV_DIR}
 {get_system_info()}
     """
-    
+
     panel = Panel(
         Align.center(Text(info_text.strip(), style="cyan")),
         title="[bold magenta]LockOn System Information",
         border_style="bright_blue",
         padding=(1, 2),
     )
-    
+
     console.print(panel)
 
 
@@ -630,7 +744,7 @@ def doctor() -> None:
     check_outdated()
     ensure_requirements()
     freeze_requirements()
-    
+
     # Success animation
     console.print()
     console.print(
@@ -642,33 +756,65 @@ def doctor() -> None:
     )
 
 
-if __name__ == "__main__":
-    show_setup_banner()
-    check_python_version()
-    parser = argparse.ArgumentParser(description="Manage LockOn dependencies and show environment info")
+def main(argv: list[str] | None = None) -> None:
+    """Command-line interface for managing LockOn."""
+    parser = argparse.ArgumentParser(
+        description="Manage LockOn dependencies and show environment info"
+    )
     sub = parser.add_subparsers(dest="command")
 
     install_p = sub.add_parser("install", help="Install required packages")
-    install_p.add_argument("--requirements", type=Path, help="Path to an alternate requirements file")
-    install_p.add_argument("--dev", action="store_true", help="Install development packages")
-    install_p.add_argument("--upgrade", action="store_true", help="Upgrade packages to latest versions")
-    install_p.add_argument("--extras", action="store_true", help="Install optional packages as well")
-    install_p.add_argument("--skip-update", action="store_true", help="Skip pulling the latest git changes before installing")
+    install_p.add_argument(
+        "--requirements", type=Path, help="Path to an alternate requirements file"
+    )
+    install_p.add_argument(
+        "--dev", action="store_true", help="Install development packages"
+    )
+    install_p.add_argument(
+        "--upgrade", action="store_true", help="Upgrade packages to latest versions"
+    )
+    install_p.add_argument(
+        "--extras", action="store_true", help="Install optional packages as well"
+    )
+    install_p.add_argument(
+        "--skip-update",
+        action="store_true",
+        help="Skip pulling the latest git changes before installing",
+    )
 
     check_p = sub.add_parser("check", help="List outdated packages")
-    check_p.add_argument("--requirements", type=Path, help="Path to the requirements file")
+    check_p.add_argument(
+        "--requirements", type=Path, help="Path to the requirements file"
+    )
 
     sub.add_parser("info", help="Show system information")
     sub.add_parser("doctor", help="Verify Python and package setup")
     venv_p = sub.add_parser("venv", help="Create or ensure the project virtualenv")
-    venv_p.add_argument("--recreate", action="store_true", help="Recreate the virtual environment")
+    venv_p.add_argument(
+        "--recreate", action="store_true", help="Recreate the virtual environment"
+    )
     sub.add_parser("clean", help="Remove the project virtualenv")
     sub.add_parser("update", help="Pull the latest changes from the repository")
     sub.add_parser("upgrade", help="Upgrade all outdated packages")
     test_p = sub.add_parser("test", help="Run the test suite")
     test_p.add_argument("extra", nargs="*", help="Additional pytest arguments")
+    test_p.add_argument(
+        "--parallel",
+        action="store_true",
+        help="Run tests in parallel using pytest-xdist",
+    )
     freeze_p = sub.add_parser("freeze", help="Write installed packages to a lock file")
-    freeze_p.add_argument("--output", type=Path, default=ROOT_DIR / "requirements.lock", help="Output lock file")
+    freeze_p.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT_DIR / "requirements.lock",
+        help="Output lock file",
+    )
+
+    vm_p = sub.add_parser("vm", help="Manage the debugging environment")
+    vm_p.add_argument(
+        "vm_args", nargs=argparse.REMAINDER, help="Arguments forwarded to manage_vm.py"
+    )
 
     args = parser.parse_args()
     if args.command == "check":
@@ -682,19 +828,24 @@ if __name__ == "__main__":
     elif args.command == "venv":
         if args.recreate and VENV_DIR.exists():
             import shutil
+
             shutil.rmtree(VENV_DIR)
         ensure_venv()
     elif args.command == "clean":
         import shutil
+
         if VENV_DIR.exists():
             shutil.rmtree(VENV_DIR)
             log("✅ Virtualenv removed.")
         else:
             log("❌ No virtualenv to remove.")
     elif args.command == "test":
-        run_tests(args.extra)
+        show_test_results(args.extra, coverage=True, parallel=args.parallel)
     elif args.command == "freeze":
         freeze_requirements(args.output)
+    elif args.command == "vm":
+        from scripts import manage_vm
+        manage_vm.main(args.vm_args)
     elif args.command == "update":
         update_repo()
     else:
@@ -705,3 +856,9 @@ if __name__ == "__main__":
             extras=getattr(args, "extras", False),
             skip_update=getattr(args, "skip_update", False),
         )
+
+
+if __name__ == "__main__":
+    show_setup_banner()
+    check_python_version()
+    main()
