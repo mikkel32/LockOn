@@ -106,6 +106,14 @@ except Exception:  # pragma: no cover - lightweight fallback
 
         def __init__(self, master=None, *args, **kwargs):
             _map_color_kwargs(kwargs)
+            if "width" in kwargs:
+                kwargs["length"] = kwargs.pop("width")
+            if "height" in kwargs:
+                # ``tk.Scale`` uses the ``width`` option to control the
+                # thickness of the widget. Map the CTk ``height`` parameter to
+                # ``width`` so callers can specify the bar height in pixels
+                # similar to ``customtkinter``.
+                kwargs["width"] = kwargs.pop("height")
             kwargs.setdefault("from_", 0.0)
             kwargs.setdefault("to", 1.0)
             kwargs.setdefault("orient", "horizontal")
