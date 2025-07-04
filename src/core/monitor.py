@@ -137,6 +137,8 @@ class FileEvent:
 from core.analyzer import PatternAnalyzer
 from core.enforcer import ActionEnforcer
 from utils.logger import SecurityLogger
+from utils import helpers
+from utils.threat import ThreatSummary
 from security.network_monitor import NetworkMonitor
 
 
@@ -604,10 +606,13 @@ class FolderMonitor(FileSystemEventHandler):
         """Handle detected threat"""
         self.stats["threats_detected"] += 1
 
-        self.logger.warning(f"Threat detected: {filepath} - Risk: {risk.level}")
+        summary = ThreatSummary.from_detection(filepath, risk)
+        self.logger.warning(summary.format())
+        details = summary.details
+
         if self.db:
             try:
-                self.db.log_threat(str(filepath), risk.level, risk.type, risk.details)
+                self.db.log_threat(str(filepath), risk.level, risk.type, details)
             except Exception:
                 pass
 

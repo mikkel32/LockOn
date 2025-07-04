@@ -267,6 +267,8 @@ with FolderMonitor() as monitor:
 - Decorator `require_privileges` ensures sensitive functions obtain rights and raises `PermissionError` when privileges are missing
 - Privileges are re-verified during monitoring loops to prevent privilege loss
 - Background privilege monitor periodically reacquires dropped rights
+- Cross-platform `is_elevated()` helper detects administrative privileges
+- Rich threat summaries highlight YARA matches within snippets for clear logs
 
 ### Response Actions
 - File quarantine with encryption
@@ -332,6 +334,11 @@ When running locally the helper installs `debugpy` automatically if it is not
 already available. The process ID is stored in `data/local_debug.pid` so you can
 stop the server later using the `halt` command. `debugpy` is required for remote
 debugging regardless of whether you use Vagrant, Docker or the local fallback.
+You can verify the environment anytime with:
+
+```bash
+python scripts/manage_vm.py doctor
+```
 
 Under the hood it calls a Python environment manager that automatically selects
 the best available backend (Vagrant preferred, then Docker, otherwise local):

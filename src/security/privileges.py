@@ -4,11 +4,14 @@ from __future__ import annotations
 import sys
 import os
 import getpass
+import logging
 from typing import Iterable, List
 import threading
 import time
 
 _win = sys.platform.startswith("win32")
+
+log = logging.getLogger("LockOn")
 
 if _win:
     import ctypes
@@ -55,6 +58,13 @@ if _win:
             user = ""
         return user.lower() == "system"
 
+    def is_elevated() -> bool:
+        """Return True if the current process has administrative rights."""
+        try:
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            return False
+
     def _get_handle(access: int) -> wintypes.HANDLE:
         handle = wintypes.HANDLE()
         if not advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), access, ctypes.byref(handle)):
@@ -68,6 +78,7 @@ if _win:
         htoken = _get_handle(TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY)
         if not htoken:
             return False
+        success = True
         for name in names:
             luid = LUID()
             if advapi32.LookupPrivilegeValueW(None, wintypes.LPCWSTR(name), ctypes.byref(luid)):
@@ -76,8 +87,12 @@ if _win:
                 tp.Privileges[0].Luid = luid
                 tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED
                 advapi32.AdjustTokenPrivileges(htoken, False, ctypes.byref(tp), ctypes.sizeof(tp), None, None)
+                if ctypes.get_last_error() != 0:
+                    success = False
+            else:
+                success = False
         kernel32.CloseHandle(htoken)
-        return ctypes.get_last_error() == 0
+        return success
 
     def enable_impersonation() -> bool:
         htoken = _get_handle(TOKEN_DUPLICATE | TOKEN_QUERY)
@@ -175,10 +190,16 @@ if _win:
         def acquire(self, privs: Iterable[str] = None, impersonate: bool = True) -> List[str]:
             privs = list(privs or ALL_PRIVILEGES)
             if privs:
-                adjust_privileges(privs)
+                ok = adjust_privileges(privs)
+                if not ok:
+                    log.debug("Failed to adjust privileges: %s", ", ".join(privs))
             if impersonate:
-                elevate_privileges_and_impersonate()
-            return self.verify(privs)
+                if not elevate_privileges_and_impersonate():
+                    log.debug("Impersonation attempt failed")
+            missing = self.verify(privs)
+            if missing:
+                log.debug("Missing privileges: %s", ", ".join(missing))
+            return missing
 
         def verify(self, privs: Iterable[str]) -> List[str]:
             return [p for p in privs if not has_privilege(p)]
@@ -186,6 +207,8 @@ if _win:
         def ensure(self, privs: Iterable[str] = None, impersonate: bool = True) -> List[str]:
             privs = list(privs or ALL_PRIVILEGES)
             self.missing = self.acquire(privs, impersonate)
+            if self.missing:
+                log.warning("Privileges missing after acquire: %s", ", ".join(self.missing))
             return self.missing
 
         def ensure_active(self, privs: Iterable[str] = None, impersonate: bool = True) -> List[str]:
@@ -193,7 +216,12 @@ if _win:
             privs = list(privs or ALL_PRIVILEGES)
             missing = self.verify(privs)
             if missing:
-                missing = self.acquire(missing, impersonate)
+                reacquired = self.acquire(missing, impersonate)
+                if not reacquired:
+                    log.info("Reacquired dropped privileges: %s", ", ".join(missing))
+                else:
+                    log.warning("Could not reacquire privileges: %s", ", ".join(reacquired))
+                return reacquired
             return missing
 
         def use(self, privs: Iterable[str], impersonate: bool = True):
@@ -220,6 +248,10 @@ if _win:
             self._monitor_privs = list(privs or self.requested or ALL_PRIVILEGES)
             self._monitor_impersonate = impersonate
             self.interval = interval or self.interval
+            log.debug(
+                "Starting privilege monitor for: %s",
+                ", ".join(self._monitor_privs),
+            )
             self._monitor_thread = threading.Thread(
                 target=self._monitor_loop, daemon=True, name="PrivilegeMonitor"
             )
@@ -231,24 +263,44 @@ if _win:
             if self._monitor_thread:
                 self._monitor_thread.join()
                 self._monitor_thread = None
+            log.debug("Privilege monitor stopped")
 
         def _monitor_loop(self) -> None:
             while self._monitor_running:
                 try:
-                    self.ensure_active(
+                    missing = self.ensure_active(
                         self._monitor_privs, impersonate=self._monitor_impersonate
                     )
+                    if not missing:
+                        log.debug("Privilege check OK")
+                    else:
+                        log.warning("Privileges lost: %s", ", ".join(missing))
                 except Exception:
                     pass
                 time.sleep(self.interval)
 else:
     def adjust_privileges(priv_names: Iterable[str]) -> bool:
-        return False
+        """Attempt to adjust privileges on POSIX systems.
+
+        Non-Windows platforms do not support granular privilege adjustment in the
+        same way as Windows. This function therefore simply returns ``True`` if
+        the current process is running as root. It allows callers to check
+        whether elevated privileges are available without raising ``NotImplementedError``.
+        """
+
+        ok = is_elevated()
+        if not ok:
+            log.debug("Privilege adjustment requested but not running as root")
+        return ok
 
     def enable_impersonation() -> bool:
         return False
 
     def _running_as_system() -> bool:
+        return os.geteuid() == 0
+
+    def is_elevated() -> bool:
+        """Return True if running as root."""
         return os.geteuid() == 0
 
     def elevate_privileges_and_impersonate() -> bool:
@@ -258,7 +310,8 @@ else:
         return -1
 
     def has_privilege(priv_name: str) -> bool:
-        return False
+        # Treat any privilege request as a root check on POSIX
+        return is_elevated()
 
     class PrivilegeManager:
         """Stubbed privilege manager for non-Windows platforms."""
@@ -274,16 +327,33 @@ else:
             self.requested: List[str] = list(privs or [])
 
         def acquire(self, privs: Iterable[str] = None, impersonate: bool = True) -> List[str]:
-            return []
+            privs = list(privs or self.requested)
+            if has_privilege("root"):
+                return []
+            log.debug("Missing privileges: %s", ", ".join(privs))
+            return privs
 
         def verify(self, privs: Iterable[str]) -> List[str]:
-            return []
+            return [] if has_privilege("root") else list(privs)
 
         def ensure(self, privs: Iterable[str] = None, impersonate: bool = True) -> List[str]:
-            return []
+            privs = list(privs or self.requested)
+            self.missing = self.acquire(privs, impersonate)
+            if self.missing:
+                log.warning("Insufficient privileges: running as non-root")
+            return self.missing
 
         def ensure_active(self, privs: Iterable[str] = None, impersonate: bool = True) -> List[str]:
-            return []
+            privs = list(privs or self.requested)
+            missing = self.verify(privs)
+            if missing:
+                reacquired = self.acquire(privs, impersonate)
+                if not reacquired:
+                    log.info("Reacquired dropped privileges: %s", ", ".join(missing))
+                else:
+                    log.warning("Could not reacquire privileges: %s", ", ".join(reacquired))
+                return reacquired
+            return missing
 
         def use(self, privs: Iterable[str], impersonate: bool = True):
             class _Ctx:
@@ -300,6 +370,10 @@ else:
             self._monitor_privs = list(privs or self.requested)
             self._monitor_impersonate = impersonate
             self.interval = interval or 60.0
+            log.debug(
+                "Starting privilege monitor for: %s",
+                ", ".join(self._monitor_privs),
+            )
             self._monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
             self._monitor_thread.start()
 
@@ -308,11 +382,16 @@ else:
             if self._monitor_thread:
                 self._monitor_thread.join()
                 self._monitor_thread = None
+            log.debug("Privilege monitor stopped")
 
         def _monitor_loop(self) -> None:
             while self._monitor_running:
                 try:
-                    self.ensure_active(self._monitor_privs, impersonate=self._monitor_impersonate)
+                    missing = self.ensure_active(self._monitor_privs, impersonate=self._monitor_impersonate)
+                    if not missing:
+                        log.debug("Privilege check OK")
+                    else:
+                        log.warning("Privileges lost: %s", ", ".join(missing))
                 except Exception:
                     pass
                 time.sleep(self.interval)

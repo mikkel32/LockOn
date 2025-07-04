@@ -5,6 +5,8 @@ from pathlib import Path
 import os
 
 from utils.logger import SecurityLogger
+from utils import helpers
+from utils.threat import ThreatSummary
 from utils.config import load_config, ensure_config
 from utils.database import Database
 from utils.paths import resource_path
@@ -92,36 +94,14 @@ class LockOnCLI:
 
     def _log_threat(self, filepath, risk) -> None:
         """Callback to log detected threats."""
-        snippet_parts: list[str] = []
-        details = getattr(risk, "details", None)
-        if isinstance(details, dict):
-            snips = details.get("snippets") or []
-            for sn in snips:
-                if isinstance(sn, dict):
-                    text = sn.get("text", "")
-                    line = sn.get("line")
-                    if line and line > 0:
-                        snippet_parts.append(f"(line {line}) {text}")
-                    elif text:
-                        snippet_parts.append(text)
-                elif sn:
-                    snippet_parts.append(str(sn))
-        snippet = " | ".join(snippet_parts)
+        summary = ThreatSummary.from_detection(filepath, risk)
         self.db.log_threat(
             str(filepath),
-            risk.level,
-            risk.type,
-            details if isinstance(details, dict) else None,
+            summary.level,
+            summary.type,
+            summary.details,
         )
-        color = {
-            "critical": "\033[31m",
-            "high": "\033[31m",
-            "medium": "\033[33m",
-            "low": "\033[32m",
-        }.get(risk.level.lower(), "")
-        reset = "\033[0m" if color else ""
-        extra = f" -> {snippet}" if snippet else ""
-        print(f"{color}{risk.level.upper()}{reset}: {filepath}{extra}")
+        print(summary.format(color=True))
 
     def _log_network_threat(self, conn) -> None:
         try:
@@ -204,38 +184,12 @@ def _print_events(db: Path, limit: int) -> None:
 
 def _print_threats(db: Path, limit: int) -> None:
     """Print recent detected threats from the database."""
-    colors = {
-        "critical": "\033[31m",
-        "high": "\033[31m",
-        "medium": "\033[33m",
-        "low": "\033[32m",
-    }
-    reset = "\033[0m"
     with Database(db) as database:
         rows = database.get_threats(limit, with_details=True)
         for path, level, ttype, details, ts in rows:
-            color = colors.get(level.lower(), "")
-            reset_code = reset if color else ""
-            snippet_parts: list[str] = []
-            try:
-                import json
-                data = json.loads(details) if details else {}
-                snips = data.get("snippets") or []
-                for sn in snips:
-                    if isinstance(sn, dict):
-                        text = sn.get("text", "")
-                        line = sn.get("line")
-                        if line and line > 0:
-                            snippet_parts.append(f"(line {line}) {text}")
-                        elif text:
-                            snippet_parts.append(text)
-                    elif sn:
-                        snippet_parts.append(str(sn))
-            except Exception:
-                pass
-            snippet = " | ".join(snippet_parts)
-            extra = f" -> {snippet}" if snippet else ""
-            print(f"{ts} {color}{level:8}{reset_code} {ttype:10} {path}{extra}")
+            summary = ThreatSummary.from_db_row(path, level, ttype, details)
+            msg = summary.format(color=True)
+            print(f"{ts} {msg}")
 
 
 def _print_tree(folder: str, config: Path | None, db: Path | None) -> None:
