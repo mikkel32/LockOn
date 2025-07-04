@@ -160,7 +160,8 @@ class IntelligenceEngine:
             'risk_level': 'low',
             'matches': [],
             'confidence': 0.0,
-            'recommendations': []
+            'recommendations': [],
+            'snippets': []
         }
 
         # Check extension
@@ -199,12 +200,14 @@ class IntelligenceEngine:
                 result['risk_level'] = 'high' if content_risk['risk'] > 0.8 else 'medium'
                 result['matches'].extend(content_risk['matches'])
                 result['confidence'] = max(result['confidence'], content_risk['risk'])
+                if content_risk.get('snippets'):
+                    result['snippets'].extend(content_risk['snippets'])
 
         return result
 
     def _analyze_file_content(self, filepath: Path) -> Dict[str, any]:
         """Analyze file content for malicious patterns"""
-        result = {'risk': 0.0, 'matches': []}
+        result = {'risk': 0.0, 'matches': [], 'snippets': []}
 
         try:
             with open(filepath, 'rb') as f:
@@ -230,9 +233,34 @@ class IntelligenceEngine:
 
         return result
 
+    def _extract_snippet(self, text: str, needle: str, ctx: int = 20) -> str:
+        """Backward compatible snippet extractor."""
+        res = self._extract_snippet_lines(text, needle, ctx)
+        return res["text"]
+
+    def _extract_snippet_lines(
+        self, text: str, needle: str, ctx: int = 2
+    ) -> dict[str, int | str]:
+        """Return snippet dictionary containing surrounding lines and line number."""
+        idx = text.lower().find(needle.lower())
+        if idx == -1:
+            return {"text": "", "line": -1}
+        lines = text.splitlines()
+        char_count = 0
+        line_no = 0
+        for i, line in enumerate(lines):
+            if char_count + len(line) >= idx:
+                line_no = i
+                break
+            char_count += len(line) + 1
+        start = max(0, line_no - ctx)
+        end = min(len(lines), line_no + ctx + 1)
+        snippet = "\n".join(lines[start:end]).replace("\n", "\\n")
+        return {"text": snippet, "line": line_no + 1}
+
     def _analyze_raw_content(self, content: bytes, patterns: Dict) -> Dict[str, any]:
         """Analyze raw *content* bytes using detection patterns."""
-        result = {'risk': 0.0, 'matches': []}
+        result = {'risk': 0.0, 'matches': [], 'snippets': []}
 
         content_hex = content.hex()
         if self.yara_scanner:
@@ -254,21 +282,31 @@ class IntelligenceEngine:
                 if string.lower() in content_str.lower():
                     result['risk'] = max(result['risk'], 0.6)
                     result['matches'].append(f"Suspicious string: {string}")
+                    snip = self._extract_snippet_lines(content_str, string)
+                    if snip["text"]:
+                        result.setdefault('snippets', []).append(snip)
 
             revshell_patterns = [
                 r"bash\s+-i\s+>&\s*/dev/tcp/",
                 r"nc\s+-e\s+/bin/sh",
             ]
             for pat in revshell_patterns:
-                if re.search(pat, content_str, re.IGNORECASE):
+                m = re.search(pat, content_str, re.IGNORECASE)
+                if m:
                     result['risk'] = max(result['risk'], 0.9)
                     result['matches'].append('Reverse shell command')
+                    snip = self._extract_snippet_lines(content_str, m.group(0))
+                    if snip["text"]:
+                        result.setdefault('snippets', []).append(snip)
                     break
 
             ip_hits = re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b", content_str)
             if ip_hits:
                 result['risk'] = max(result['risk'], 0.6)
                 result['matches'].append('Suspicious IP address')
+                snip = self._extract_snippet_lines(content_str, ip_hits[0])
+                if snip["text"]:
+                    result.setdefault('snippets', []).append(snip)
 
             import base64
             encoded_strings = re.findall(r'[A-Za-z0-9+/=]{20,}', content_str)
@@ -279,16 +317,25 @@ class IntelligenceEngine:
                     if any(token in decoded for token in ['powershell', 'cmd.exe']):
                         result['risk'] = max(result['risk'], 0.7)
                         result['matches'].append('Suspicious base64 command')
+                        snip = self._extract_snippet_lines(content_str, enc)
+                        if snip["text"]:
+                            result.setdefault('snippets', []).append(snip)
                         break
                     if 'eicar-standard-antivirus-test-file' in decoded:
                         result['risk'] = max(result['risk'], 0.9)
                         result['matches'].append('EICAR signature (base64)')
+                        snip = self._extract_snippet_lines(content_str, enc)
+                        if snip["text"]:
+                            result.setdefault('snippets', []).append(snip)
                         break
                     if self.yara_scanner:
                         ym = self.yara_scanner.scan_bytes(decoded_bytes)
                         if ym:
                             result['risk'] = max(result['risk'], 0.9)
                             result['matches'].extend([f'yara:{m}' for m in ym])
+                            snip = self._extract_snippet_lines(content_str, enc)
+                            if snip["text"]:
+                                result.setdefault('snippets', []).append(snip)
                             break
                 except Exception:
                     continue
@@ -331,12 +378,16 @@ class IntelligenceEngine:
                     if sub['risk'] > result['risk']:
                         result = sub
                         result['matches'] = [f"{name}: {m}" for m in sub['matches']]
+                        if 'snippets' in sub:
+                            result['snippets'] = sub['snippets']
                         if 'yara_meta' in sub:
                             result['yara_meta'] = sub['yara_meta']
                     elif sub['risk'] > 0:
                         result['matches'].extend([f"{name}: {m}" for m in sub['matches']])
                         if 'yara_meta' in sub:
                             result.setdefault('yara_meta', []).extend(sub['yara_meta'])
+                        if 'snippets' in sub:
+                            result.setdefault('snippets', []).extend(sub['snippets'])
         except Exception:
             pass
         return result

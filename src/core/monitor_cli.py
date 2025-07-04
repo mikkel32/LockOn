@@ -72,6 +72,9 @@ class LockOnCLI:
                 debugpy.wait_for_client()
         with self.monitor, self.db:
             self.monitor.start()
+            if not self.monitor.monitoring:
+                self.logger.error("Monitoring failed to start")
+                return
             try:
                 while True:
                     time.sleep(1)
@@ -89,14 +92,43 @@ class LockOnCLI:
 
     def _log_threat(self, filepath, risk) -> None:
         """Callback to log detected threats."""
-        self.db.log_threat(str(filepath), risk.level, risk.type)
+        snippet_parts: list[str] = []
+        details = getattr(risk, "details", None)
+        if isinstance(details, dict):
+            snips = details.get("snippets") or []
+            for sn in snips:
+                if isinstance(sn, dict):
+                    text = sn.get("text", "")
+                    line = sn.get("line")
+                    if line and line > 0:
+                        snippet_parts.append(f"(line {line}) {text}")
+                    elif text:
+                        snippet_parts.append(text)
+                elif sn:
+                    snippet_parts.append(str(sn))
+        snippet = " | ".join(snippet_parts)
+        self.db.log_threat(
+            str(filepath),
+            risk.level,
+            risk.type,
+            details if isinstance(details, dict) else None,
+        )
+        color = {
+            "critical": "\033[31m",
+            "high": "\033[31m",
+            "medium": "\033[33m",
+            "low": "\033[32m",
+        }.get(risk.level.lower(), "")
+        reset = "\033[0m" if color else ""
+        extra = f" -> {snippet}" if snippet else ""
+        print(f"{color}{risk.level.upper()}{reset}: {filepath}{extra}")
 
     def _log_network_threat(self, conn) -> None:
         try:
             entry = f"{conn.pid}:{conn.raddr.ip}:{conn.raddr.port}"
         except Exception:
             entry = str(conn)
-        self.db.log_threat(entry, "high", "network")
+        self.db.log_threat(entry, "high", "network", None)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -172,9 +204,38 @@ def _print_events(db: Path, limit: int) -> None:
 
 def _print_threats(db: Path, limit: int) -> None:
     """Print recent detected threats from the database."""
+    colors = {
+        "critical": "\033[31m",
+        "high": "\033[31m",
+        "medium": "\033[33m",
+        "low": "\033[32m",
+    }
+    reset = "\033[0m"
     with Database(db) as database:
-        for path, level, ttype, ts in database.get_threats(limit):
-            print(f"{ts} {level:8} {ttype:10} {path}")
+        rows = database.get_threats(limit, with_details=True)
+        for path, level, ttype, details, ts in rows:
+            color = colors.get(level.lower(), "")
+            reset_code = reset if color else ""
+            snippet_parts: list[str] = []
+            try:
+                import json
+                data = json.loads(details) if details else {}
+                snips = data.get("snippets") or []
+                for sn in snips:
+                    if isinstance(sn, dict):
+                        text = sn.get("text", "")
+                        line = sn.get("line")
+                        if line and line > 0:
+                            snippet_parts.append(f"(line {line}) {text}")
+                        elif text:
+                            snippet_parts.append(text)
+                    elif sn:
+                        snippet_parts.append(str(sn))
+            except Exception:
+                pass
+            snippet = " | ".join(snippet_parts)
+            extra = f" -> {snippet}" if snippet else ""
+            print(f"{ts} {color}{level:8}{reset_code} {ttype:10} {path}{extra}")
 
 
 def _print_tree(folder: str, config: Path | None, db: Path | None) -> None:

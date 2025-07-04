@@ -331,6 +331,9 @@ class FolderMonitor(FileSystemEventHandler):
         if not self.target_folder:
             self.logger.error("No target folder set")
             return
+        if not self.target_folder.exists():
+            self.logger.error(f"Target folder missing: {self.target_folder}")
+            return
 
         try:
             from security.privileges import has_privilege, ALL_PRIVILEGES
@@ -604,7 +607,7 @@ class FolderMonitor(FileSystemEventHandler):
         self.logger.warning(f"Threat detected: {filepath} - Risk: {risk.level}")
         if self.db:
             try:
-                self.db.log_threat(str(filepath), risk.level, risk.type)
+                self.db.log_threat(str(filepath), risk.level, risk.type, risk.details)
             except Exception:
                 pass
 
@@ -696,7 +699,7 @@ class FolderMonitor(FileSystemEventHandler):
                                 try:
                                     entry = f"{proc.pid}:{proc.info['name']}"
                                     level = "high" if suspicious else "medium"
-                                    self.db.log_threat(entry, level, "process")
+                                    self.db.log_threat(entry, level, "process", None)
                                 except Exception:
                                     pass
                             self.stats["threats_detected"] += 1
@@ -820,7 +823,7 @@ class FolderMonitor(FileSystemEventHandler):
         if self.db:
             try:
                 entry = f"{pid}:{ip}:{port}"
-                self.db.log_threat(entry, analysis.level, "network")
+                self.db.log_threat(entry, analysis.level, "network", analysis.details)
             except Exception:
                 pass
         self.stats["threats_detected"] += 1

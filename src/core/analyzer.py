@@ -133,6 +133,8 @@ class PatternAnalyzer:
             "matches": analysis.get("matches", []),
             "confidence": confidence,
         }
+        if analysis.get("snippets"):
+            details["snippets"] = analysis["snippets"]
         if "yara_meta" in analysis:
             details["yara_meta"] = analysis["yara_meta"]
 

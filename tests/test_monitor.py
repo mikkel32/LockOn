@@ -209,6 +209,14 @@ class TestFolderMonitor(unittest.TestCase):
             self.assertTrue(mon.monitoring)
         self.assertFalse(mon.monitoring)
 
+    def test_start_missing_folder(self):
+        """start() should fail gracefully if folder does not exist."""
+        mon = FolderMonitor()
+        missing = Path(self.test_dir) / "missing"
+        mon.set_target_folder(missing)
+        mon.start()
+        self.assertFalse(mon.monitoring)
+
     def test_get_stats(self):
         """get_stats should include uptime and watchlist size."""
         self.monitor.add_watch_path(Path(self.test_dir) / "a.txt")

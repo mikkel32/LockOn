@@ -16,6 +16,7 @@ class MonitorView(ctk.CTkFrame):
         super().__init__(parent, corner_radius=0, fg_color="transparent")
         self.app = app
         self.file_events = []
+        self.threats = []
 
         self._create_layout()
 
@@ -45,12 +46,16 @@ class MonitorView(ctk.CTkFrame):
         content_frame.grid_columnconfigure(0, weight=1)
         content_frame.grid_columnconfigure(1, weight=2)
         content_frame.grid_rowconfigure(0, weight=1)
+        content_frame.grid_rowconfigure(1, weight=0)
 
         # File tree
         self._create_file_tree(content_frame)
 
         # Activity log
         self._create_activity_log(content_frame)
+
+        # Threat list
+        self._create_threat_list(content_frame)
 
     def _create_control_panel(self):
         """Create monitor controls"""
@@ -168,6 +173,63 @@ class MonitorView(ctk.CTkFrame):
         # Initial log
         self.add_log_entry("Monitor initialized", "info")
 
+    def _create_threat_list(self, parent):
+        """Create list showing detected threats."""
+        threat_frame = ctk.CTkFrame(parent, corner_radius=15, fg_color="#2a2a2a")
+        threat_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(10, 0))
+
+        title = ctk.CTkLabel(
+            threat_frame,
+            text="⚠️ Detected Threats",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        )
+        title.pack(pady=(15, 10))
+
+        self.threat_text = ctk.CTkTextbox(
+            threat_frame,
+            font=ctk.CTkFont(family="monospace", size=11),
+            height=120,
+            wrap="none",
+        )
+        self.threat_text.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+
+        # color tags
+        self.threat_text.tag_config("critical", foreground="#ff0000")
+        self.threat_text.tag_config("high", foreground="#ff6600")
+        self.threat_text.tag_config("medium", foreground="#ff9900")
+        self.threat_text.tag_config("low", foreground="#00ff00")
+
+    def _update_threat_display(self) -> None:
+        """Refresh threat list display."""
+        self.threat_text.configure(state="normal")
+        self.threat_text.delete("1.0", "end")
+        for entry in self.threats[-100:]:
+            ts = entry["timestamp"].strftime("%H:%M:%S.%f")[:-3]
+            level = entry["level"].lower()
+            ttype = entry.get("type", "")
+            path = entry["path"]
+            snippet = entry.get("snippet")
+            line = entry.get("line")
+            icon = {
+                "critical": "🟥",
+                "high": "🟥",
+                "medium": "🟨",
+                "low": "🟩",
+            }.get(level, "⚠️")
+            extra = ""
+            if snippet:
+                if line:
+                    extra = f" (line {line}) -> {snippet}"
+                else:
+                    extra = f" -> {snippet}"
+            self.threat_text.insert(
+                "end",
+                f"[{ts}] {icon} {level.upper():8} {ttype:10} {path}{extra}\n",
+                level,
+            )
+        self.threat_text.see("end")
+        self.threat_text.configure(state="disabled")
+
     def add_log_entry(self, message: str, level: str = "info"):
         """Add entry to activity log"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -212,6 +274,8 @@ class MonitorView(ctk.CTkFrame):
         self.log_text.delete("1.0", "end")
         self.log_text.configure(state="disabled")
         self.file_events.clear()
+        self.threats.clear()
+        self._update_threat_display()
         self.add_log_entry("Log cleared", "info")
 
     def _apply_filter(self, choice: str):
@@ -275,12 +339,47 @@ class MonitorView(ctk.CTkFrame):
             self._refresh_file_tree()
 
     def _on_threat(self, filepath, risk):
-        level = "high_risk" if risk.level in {"high", "critical"} else "medium_risk"
-        self.add_log_entry(f"threat {risk.level}: {filepath}", level)
+        level = risk.level.lower()
+        log_lvl = "high_risk" if level in {"high", "critical"} else "medium_risk"
+        self.add_log_entry(f"threat {risk.level}: {filepath}", log_lvl)
+        snippet = None
+        line = None
+        if isinstance(risk.details, dict):
+            snips = risk.details.get("snippets")
+            if snips:
+                first = snips[0]
+                if isinstance(first, dict):
+                    snippet = first.get("text")
+                    line = first.get("line")
+                else:
+                    snippet = first
+        self.threats.append(
+            {
+                "timestamp": datetime.now(),
+                "path": str(filepath),
+                "level": level,
+                "type": risk.type,
+                "snippet": snippet,
+                "line": line,
+            }
+        )
+        self._update_threat_display()
 
     def _on_network_threat(self, conn):
         try:
             msg = f"network {conn.pid}:{conn.raddr.ip}:{conn.raddr.port}"
+            path = msg
         except Exception:
             msg = str(conn)
+            path = msg
         self.add_log_entry(msg, "high_risk")
+        self.threats.append(
+            {
+                "timestamp": datetime.now(),
+                "path": path,
+                "level": "high",
+                "type": "network",
+                "snippet": None,
+            }
+        )
+        self._update_threat_display()
