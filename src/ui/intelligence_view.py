@@ -344,7 +344,7 @@ class IntelligenceView(ctk.CTkFrame):
             config = {
                 'patterns': json.loads(self.file_patterns.get("1.0", "end-1c")),
                 'thresholds': {
-                    key: int(slider.get()) 
+                    key: int(slider.get())
                     for key, slider in self.threshold_vars.items()
                 },
                 'ml_sensitivity': self.ml_sensitivity.get(),
@@ -353,6 +353,7 @@ class IntelligenceView(ctk.CTkFrame):
                     for key, checkbox in self.harsh_actions.items()
                 }
             }
+            print("Saving intelligence config:", config)
 
             # Save configuration
             # In real implementation, this would update the Intelligence files

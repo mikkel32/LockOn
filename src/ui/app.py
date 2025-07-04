@@ -11,10 +11,9 @@ try:
     from .ctk import ctk
 except ImportError:  # pragma: no cover - allow running as a script
     from ui.ctk import ctk  # type: ignore
-from typing import Dict, Optional
+from typing import Dict
 import sys
-import json
-from pathlib import Path
+
 
 # Import views
 from .dashboard import DashboardView

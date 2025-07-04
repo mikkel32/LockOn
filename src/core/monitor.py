@@ -11,12 +11,15 @@ import sys
 import hashlib
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional, Callable, TYPE_CHECKING
 from dataclasses import dataclass
 from collections import deque
 import queue
 
 from utils.database import Database
+
+if TYPE_CHECKING:  # pragma: no cover
+    from security.privileges import PrivilegeManager
 
 try:  # optional watchdog dependency
     from watchdog.observers import Observer  # type: ignore

@@ -369,6 +369,8 @@ Use `--provision` with `start` to reprovision the VM. Once running, attach your
 debugger using the **Attach to VM** configuration in VS Code. The debug port
 defaults to **5678** but can be changed by setting the `LOCKON_DEBUG_PORT`
 environment variable or the `--port` flag when starting the environment.
+Pass `--open-vscode` to `manage_vm.py` or `debug_vm.sh` to automatically launch
+Visual Studio Code with the correct environment configured.
 
 ### Running inside Docker
 

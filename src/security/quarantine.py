@@ -1,6 +1,5 @@
 from pathlib import Path
 import shutil
-import sys
 from datetime import datetime
 
 from utils.paths import resource_path

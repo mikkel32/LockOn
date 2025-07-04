@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import time
 import sys
-from typing import Callable, List, Iterable
+from typing import Callable, List, TYPE_CHECKING
 
 from utils.psutil_compat import psutil
 
@@ -27,6 +27,9 @@ except Exception:  # pragma: no cover - fallback when psutil is missing
         type: int | None = None
         status: str | None = None
 from .privileges import require_privileges
+
+if TYPE_CHECKING:  # pragma: no cover - for type hints
+    from .privileges import PrivilegeManager
 
 try:  # optional
     from core.analyzer import PatternAnalyzer

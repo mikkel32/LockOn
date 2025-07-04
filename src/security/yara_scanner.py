@@ -114,7 +114,6 @@ class YaraScanner:
                 m = re.match(r"\$(\w+)\s*=\s*(.+)", line)
                 if m:
                     var, val = m.groups()
-                    nocase = False
                     if val.endswith("nocase"):
                         val = val[:-6].strip()
                         flags = re.IGNORECASE
@@ -208,7 +207,7 @@ class YaraScanner:
     def _evaluate_condition(self, expr: str, matches: Iterable[str], start: Iterable[str], total: int) -> bool:
         """Evaluate simplified condition expression."""
         cond = expr
-        cond = cond.replace("any of them", f"len(matches) > 0")
+        cond = cond.replace("any of them", "len(matches) > 0")
         cond = cond.replace("all of them", f"len(matches) == {total}")
         cond = cond.replace("true", "True").replace("false", "False")
         cond = re.sub(r"\$(\w+)\s+at\s+0", lambda m: f"'{m.group(1)}' in start", cond)

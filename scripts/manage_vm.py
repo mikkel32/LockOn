@@ -199,7 +199,7 @@ class LocalBackend(Backend):
             return
         proc = self._spawn([sys.executable, "debug_server.py", "--port", str(port)], env=env)
         self.pid_file.parent.mkdir(parents=True, exist_ok=True)
-        self.pid_file.write_text(str(proc.pid))
+        self.pid_file.write_text(f"{proc.pid}\n")
         print(f"Local debug server started on port {port} (PID {proc.pid}).")
 
     def halt(self) -> None:
@@ -209,6 +209,11 @@ class LocalBackend(Backend):
             return
         try:
             os.kill(pid, signal.SIGTERM)
+            try:
+                os.waitpid(pid, 0)
+            except OSError:
+                # Process is not our child or already reaped
+                pass
         except OSError as exc:
             print(f"Failed to stop debug server: {exc}", file=sys.stderr)
         else:

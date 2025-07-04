@@ -13,7 +13,6 @@ try:  # pragma: no cover - optional dependency
     import customtkinter as ctk  # type: ignore
 except Exception:  # pragma: no cover - lightweight fallback
     import tkinter as tk
-    from tkinter import ttk
 
     def _map_color_kwargs(kwargs: dict[str, object]) -> None:
         """Translate ``customtkinter`` style keys to ``tkinter`` equivalents."""

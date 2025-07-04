@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import platform
 import subprocess
-from datetime import datetime
 from typing import Iterable
 from .psutil_compat import psutil
 

@@ -3,11 +3,10 @@ Intelligence Engine - Advanced pattern analysis and threat detection
 """
 import json
 import re
-import hashlib
 import zipfile
 import io
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List
 from utils.paths import resource_path
 
 try:
@@ -225,7 +224,7 @@ class IntelligenceEngine:
                 else:
                     result['matches'].extend(zip_result['matches'])
 
-        except Exception as e:
+        except Exception:
             # Can't read file
             pass
 
