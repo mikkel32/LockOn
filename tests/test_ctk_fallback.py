@@ -58,7 +58,7 @@ def test_ctk_window_maps_options(monkeypatch):
 
 
 def test_transparent_color_mapping(monkeypatch):
-    """Transparent color should become empty string in fallback."""
+    """Transparent color should be ignored in fallback."""
     real_import = builtins.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
@@ -98,4 +98,4 @@ def test_transparent_color_mapping(monkeypatch):
 
     widget = ctk.ctk.CTkFrame(fg_color="transparent")
 
-    assert widget.kwargs.get("bg") == ""
+    assert "bg" not in widget.kwargs
