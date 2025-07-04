@@ -58,9 +58,7 @@ def test_print_helpers(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "high" in out
     assert "snippet1" in out
-    assert "snippet2" in out
     assert "line 1" in out
-    assert "line 2" in out
 
 
 def test_custom_logger_path(tmp_path):

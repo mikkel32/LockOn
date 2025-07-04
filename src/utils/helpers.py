@@ -101,3 +101,60 @@ def run_with_spinner(
 
     return proc
 
+
+def parse_threat_details(
+    details: dict | None,
+) -> tuple[str | None, str | None, int | None]:
+    """Return first snippet, its line number and first YARA match.
+
+    Parameters
+    ----------
+    details:
+        Detection dictionary containing ``snippets`` and ``matches`` lists.
+
+    Returns
+    -------
+    tuple
+        ``(snippet, match, line_number)`` where each element may be ``None`` if
+        not present in *details*.
+    """
+
+    if not isinstance(details, dict):
+        return None, None, None
+
+    snippet: str | None = None
+    match: str | None = None
+    line: int | None = None
+
+    snips = details.get("snippets") or []
+    if snips:
+        first = snips[0]
+        if isinstance(first, dict):
+            snippet = first.get("text")
+            line = first.get("line")
+        else:
+            snippet = str(first)
+        if isinstance(snippet, str):
+            snippet = snippet.strip()
+            if len(snippet) > 120:
+                snippet = snippet[:117] + "..."
+    matches = details.get("matches") or []
+    if matches:
+        match = matches[0]
+
+    return snippet, match, line
+
+
+def highlight(text: str, sub: str, color_code: str = "31") -> str:
+    """Return *text* with *sub* wrapped in ANSI color codes.
+
+    If *sub* is not present in *text* no highlighting occurs.
+    """
+    if not sub or not text:
+        return text
+    try:
+        i = text.index(sub)
+    except ValueError:
+        return text
+    return text[:i] + f"\033[{color_code}m{sub}\033[0m" + text[i + len(sub) :]
+
